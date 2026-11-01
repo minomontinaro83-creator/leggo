@@ -6,7 +6,7 @@ const FONTS={
  'Georgia':'Georgia,"Times New Roman",serif','Palatino':'"Palatino Linotype",Palatino,"Book Antiqua",serif',
  'Atkinson':'"Atkinson Hyperlegible",system-ui,sans-serif','Sans':'system-ui,-apple-system,Roboto,sans-serif','Mono':'ui-monospace,Menlo,Consolas,monospace'
 };
-const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1,pin:false};
+const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1,pin:false,bar:'day'};
 let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
   tts:{engine:'device',voice:'',okey:'',ovoice:'coral',omodel:'gpt-4o-mini-tts'}};
 try{const r=localStorage.getItem(SKEY);if(r){const o=JSON.parse(r);S={...S,...o,set:{...DEF,...(o.set||{})},tts:{...S.tts,...(o.tts||{})}}}}catch(e){}
@@ -95,7 +95,7 @@ function rLib(){
     const cur=S.last&&bookById(S.last);
     if(cur&&statusOf(cur)==='reading'){
       const p=planInfo(cur);
-      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p?' · lezione '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
+      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p?' · tappa '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
     }
     const fl=[['all','Tutti'],['reading','In lettura'],['new','Da leggere'],['done','Letti']];
     h+='<div class="row wrap">'+fl.map(f=>'<button class="chip'+(S.filter===f[0]?' on':'')+'" data-f="'+f[0]+'">'+f[1]+'</button>').join('')+'</div>';
@@ -179,7 +179,7 @@ function goalSheet(b){
   const endOf=()=>mode==='days'?addDays(todayISO(),Math.max(1,n)-1):mode==='weeks'?addDays(todayISO(),Math.max(1,n)*7-1):date;
   const draw=box=>{
     const end=endOf(),days=Math.max(1,dayDiff(todayISO(),end)+1),remW=Math.max(0,b.words-s.w),pg=pagesOf(b)/b.words;
-    $('#g-pv',box).innerHTML=dayDiff(todayISO(),end)<0?'<span class="warn">La data è già passata.</span>':'Finire entro <b>'+fmtDateY(end)+'</b>. Il libro viene diviso in <b>'+days+(days===1?' lezione':' lezioni')+'</b>, una al giorno: circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine</b> ciascuna, '+dur(remW/days)+' di lettura. Le trovi in Indice > Giorni.';
+    $('#g-pv',box).innerHTML=dayDiff(todayISO(),end)<0?'<span class="warn">La data è già passata.</span>':'Finire entro <b>'+fmtDateY(end)+'</b>. Il libro viene diviso in <b>'+days+(days===1?' tappa':' tappe')+'</b>, una al giorno: circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine</b> ciascuna, '+dur(remW/days)+' di lettura. Le trovi in Indice > Giorni.';
     $('#g-n',box).hidden=mode==='date';$('#g-d',box).hidden=mode!=='date';
     box.querySelectorAll('#g-m button').forEach(x=>x.classList.toggle('on',x.dataset.v===mode));
   };
@@ -202,8 +202,8 @@ function rOggi(){
   plans.forEach(({b,p})=>{
     const f=p.pctDay;
     h+='<button class="card stack" data-o="'+b.id+'" style="text-align:left"><div class="lrow">'+coverHtml(b)+'<div class="grow"><div style="font-family:var(--disp);font-size:17px;font-weight:600;line-height:1.2">'+esc(b.title)+'</div>'
-     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">Lezione <b>'+p.L+'</b> di '+p.n+' · entro il '+fmtDate(p.end)+'</div>')
-     +'<div style="margin-top:6px;font-size:15px">'+(p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+(Math.round(p.perP)<=1?' pagina, ':' pagine, ')+dur(p.perW)+')</span>')+(p.behindP>=1&&!p.late?'<div class="small warn">Indietro di '+Math.round(p.behindP)+' pagine rispetto alle lezioni precedenti</div>':'')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">Lezione di oggi al '+Math.round(f*100)+'% · libro al '+pctTxt(frac(b))+'</div></button>';
+     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">Tappa <b>'+p.L+'</b> di '+p.n+' · entro il '+fmtDate(p.end)+'</div>')
+     +'<div style="margin-top:6px;font-size:15px">'+(p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+(Math.round(p.perP)<=1?' pagina, ':' pagine, ')+dur(p.perW)+')</span>')+(p.behindP>=1&&!p.late?'<div class="small warn">Indietro di '+Math.round(p.behindP)+' pagine rispetto alle tappe precedenti</div>':'')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">Tappa di oggi al '+Math.round(f*100)+'% · libro al '+pctTxt(frac(b))+'</div></button>';
   });
   v.innerHTML=h+'</div>';
   v.querySelectorAll('[data-o]').forEach(e=>e.onclick=()=>openBook(e.dataset.o));
@@ -361,7 +361,7 @@ function drawChapter(c){
   s.bm.filter(x=>x.c===c).forEach(x=>{const el=root.querySelector(':scope > [data-i="'+x.b+'"]');if(el)el.classList.add('bmk')});
   const pl=planInfo(R.b);
   if(pl&&!pl.late&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){const tw=pl.toW-R.b.chapters[c].w0;let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});const el=root.querySelector(':scope > [data-i="'+bi+'"]');
-    if(el){const m=document.createElement('div');m.className='lesson-end';m.textContent='Fine della lezione di oggi ('+pl.L+' di '+pl.n+')';el.after(m)}}
+    if(el){const m=document.createElement('div');m.className='lesson-end';m.textContent='Fine della tappa di oggi ('+pl.L+' di '+pl.n+')';el.after(m)}}
   $('#r-title').textContent=R.b.title;
   const n=$('#c-next');if(n)n.onclick=()=>chapterStep(1);
   const dd=$('#d-done');if(dd)dd.onclick=()=>{const x=BK(R.id);x.done=true;x.w=R.b.words;x.max=R.b.words;save();drawChapter(R.c);toast('Libro letto')};
@@ -404,12 +404,17 @@ function savePos(){
 }
 function flushNow(){try{if($('#reader').classList.contains('open'))savePos();clearTimeout(st);localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}}
 let pgT=0;
+function barDay(p){return !!p&&S.set.bar==='day'}
 function updateInfo(){
   if(!R.b)return;const b=R.b,w=curW(),f=b.words?Math.min(1,w/b.words):0;
-  if(!R.seekDrag)$('#r-seek').value=Math.round(f*1000);
   const pg=b.ext==='pdf'&&R.pgNow?R.pgNow:Math.max(1,Math.min(pagesOf(b),Math.round(f*pagesOf(b))||1));
-  const p=planInfo(b,w);
-  $('#r-info').textContent='Cap. '+(R.c+1)+'/'+b.chapters.length+' · '+pctTxt(f)+' · pag. '+pg+' di '+pagesOf(b)+' · '+dur(b.words-w)+(p?' · lezione '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':'');
+  const p=planInfo(b,w),day=barDay(p),mode=S.set.bar;
+  if(!R.seekDrag)$('#r-seek').value=day?Math.round(Math.max(0,Math.min(1,p.pctDay))*1000):Math.round(f*1000);
+  let t;
+  if(day){const pr=Math.round(p.pctDay*100);t='Tappa '+p.L+' di '+p.n+' · '+(p.ok?'completata':pr+'%')+' · pag. '+Math.max(p.fromP,Math.min(p.toP,pg))+' di '+p.fromP+'-'+p.toP+(p.ok?'':' · '+dur(p.toW-w)+' alla fine')}
+  else{t='Cap. '+(R.c+1)+'/'+b.chapters.length+' · libro '+pctTxt(f)+' · pag. '+pg+' di '+pagesOf(b)+' · '+dur(b.words-w);
+    if(p&&mode==='both')t+=' · tappa '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%'}
+  $('#r-info').textContent=t;
   $('#r-tp').style.width=(f*100)+'%'
 }
 $('#rscroll').addEventListener('scroll',()=>{
@@ -443,8 +448,11 @@ function jumpW(w,silent){
   restoreAnchor({c,b:bi,off:20});savePos();
   if(R.back&&!silent)banner('Hai cambiato punto',[{l:'Torna dov’ero',fn:()=>{const x=R.back;restoreAnchor(x);savePos()}}],8000)
 }
-$('#r-seek').addEventListener('input',e=>{R.seekDrag=true;const f=e.target.value/1000;$('#r-info').textContent='Vai al '+pctTxt(f)+' · pag. '+Math.max(1,Math.round(f*pagesOf(R.b)))+' di '+pagesOf(R.b)});
-$('#r-seek').addEventListener('change',e=>{R.seekDrag=false;jumpW(e.target.value/1000*R.b.words)});
+$('#r-seek').addEventListener('input',e=>{R.seekDrag=true;const v=e.target.value/1000,p=planInfo(R.b,curW());
+  if(barDay(p)){const w=p.fromW+v*(p.toW-p.fromW);$('#r-info').textContent='Vai al '+Math.round(v*100)+'% della tappa · pag. '+Math.max(1,Math.round(w/R.b.words*pagesOf(R.b)))}
+  else $('#r-info').textContent='Vai al '+pctTxt(v)+' · pag. '+Math.max(1,Math.round(v*pagesOf(R.b)))+' di '+pagesOf(R.b)});
+$('#r-seek').addEventListener('change',e=>{R.seekDrag=false;const v=e.target.value/1000,p=planInfo(R.b,curW());
+  jumpW(barDay(p)?p.fromW+v*(p.toW-p.fromW):v*R.b.words)});
 
 /* tocchi nel testo */
 let tStart=null;
@@ -557,6 +565,7 @@ function fmtSheet(){
   +rng('f-fs','Dimensione',12,36,1,s.fs,' px')+rng('f-lh','Interlinea',1.1,2.4,.05,s.lh)+rng('f-ps','Spazio tra paragrafi',0,2,.1,s.ps,' em')+rng('f-fw','Spessore',300,700,100,s.fw)+rng('f-ti','Rientro prima riga',0,3,.25,s.ti,' em')
   +'<div class="field"><label>Allineamento</label>'+segb('f-ta',[['justify','Giustificato'],['left','A sinistra']],s.ta)+'</div>'
   +'<label class="row"><span class="grow">Sillabazione</span><input type="checkbox" id="f-hy"'+(s.hy?' checked':'')+'></label>'
+  +'<div class="field"><label>Barra in basso mostra</label>'+segb('f-bar',[['day','Tappa del giorno'],['book','Tutto il libro'],['both','Entrambe']],s.bar)+'<div class="small mute">La barra in alto mostra sempre tutto il libro. Senza obiettivo, quella in basso mostra il libro.</div></div>'
   +'<label class="row"><span class="grow">Barra di avanzamento sempre visibile<br><span class="small mute">Resta in basso anche a schermo intero</span></span><input type="checkbox" id="f-pin"'+(s.pin?' checked':'')+'></label>'
   +'<h3>Margini</h3>'+rng('f-mt','Alto',0,80,1,s.mt,' px')+rng('f-mb','Basso',0,80,1,s.mb,' px')+rng('f-ml','Sinistro',0,80,1,s.ml,' px')+rng('f-mr','Destro',0,80,1,s.mr,' px')
   +'<h3>Profili</h3><div class="row wrap">'+profs.map(p=>'<button class="chip" data-p="'+esc(p)+'">'+esc(p)+'</button>').join('')+'</div><div class="row"><input class="input grow" id="f-pn" type="text" placeholder="Nome del profilo (es. Notte)"><button class="btn sm" id="f-ps2">Salva</button></div>',box=>{
@@ -565,7 +574,7 @@ function fmtSheet(){
     bindR('f-fs','fs',' px');bindR('f-lh','lh');bindR('f-ps','ps',' em');bindR('f-fw','fw');bindR('f-ti','ti',' em');bindR('f-mt','mt',' px');bindR('f-mb','mb',' px');bindR('f-ml','ml',' px');bindR('f-mr','mr',' px');
     $('#f-fam',box).onchange=e=>upd('fam',e.target.value);
     const bindS=(id,k,cb)=>box.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{box.querySelectorAll('#'+id+' button').forEach(x=>x.classList.toggle('on',x===b));upd(k,b.dataset.v);if(cb)cb()});
-    bindS('f-theme','theme');bindS('f-ta','ta');bindS('f-mode','mode',()=>{applyFmt();refresh()});
+    bindS('f-theme','theme');bindS('f-bar','bar',()=>updateInfo());bindS('f-ta','ta');bindS('f-mode','mode',()=>{applyFmt();refresh()});
     $('#f-hy',box).onchange=e=>upd('hy',e.target.checked);
     $('#f-pin',box).onchange=e=>{upd('pin',e.target.checked);setTimeout(layoutPages,260)};
     box.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{S.set={...DEF,...S.profiles[b.dataset.p]};save();applyFmt();refresh();fmtSheet()});
