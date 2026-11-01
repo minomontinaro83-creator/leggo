@@ -694,12 +694,18 @@ function listenSheet(){
 $('#r-listen').onclick=listen;
 try{speechSynthesis.onvoiceschanged=()=>{}}catch(e){}
 
+function todayBanner(){
+  const pl=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p&&!x.p.ok&&!x.p.late).sort((x,y)=>(y.b.id===S.last)-(x.b.id===S.last))[0];
+  if(!pl)return;const {b,p}=pl,t=b.title.length>28?b.title.slice(0,27)+'…':b.title;
+  banner('Oggi: tappa '+p.L+' di '+p.n+' di «'+t+'» · pag. '+p.fromP+'-'+p.toP,[{l:'Leggi',fn:()=>openBook(b.id)}],14000)
+}
 /* ================= avvio ================= */
 (async function boot(){
   applyTheme();
   try{await IDB.open();LIB=await IDB.all('books')}catch(e){toast('Database locale non disponibile')}
   if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
   go('lib',true);
+  setTimeout(()=>{if(!$('#reader').classList.contains('open')&&$('#resume').hidden)todayBanner()},900);
   const q=S.sess;if(!q)return;
   try{
     if(q.view&&q.view!=='lib'&&document.getElementById('v-'+q.view))go(q.view);
