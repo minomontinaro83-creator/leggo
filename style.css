@@ -56,7 +56,7 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 /* lettore */
 #reader{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:20;padding-top:env(safe-area-inset-top,0)}
 #reader.open{display:flex}
-.topprog{position:absolute;left:0;right:0;top:env(safe-area-inset-top,0);height:3px;z-index:6;pointer-events:none}
+.topprog{position:absolute;left:0;right:0;top:env(safe-area-inset-top,0);height:5px;z-index:6;pointer-events:none}
 .topprog i{display:block;height:100%;width:0;background:var(--acc);transition:width .12s}
 .rtop,.rbot{display:flex;align-items:center;gap:6px;padding:6px max(10px,env(safe-area-inset-left,0));background:var(--bg);color:var(--mute);font-size:13px;transition:transform .2s,opacity .2s;z-index:3}
 .rtop{border-bottom:1px solid var(--line)}
@@ -154,3 +154,6 @@ select.input{appearance:auto}
 .sheet .tabs{display:flex;gap:6px;overflow-x:auto}
 .warn{color:var(--warn)}
 input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
+
+#reader.pinbar.immersive .rbot{transform:none;opacity:1;pointer-events:auto;position:static}
+.lesson-end{margin:18px 0;padding:8px 12px;border-top:2px solid var(--acc);border-bottom:2px solid var(--acc);color:var(--acc);text-align:center;font:600 13px system-ui,sans-serif;text-indent:0}

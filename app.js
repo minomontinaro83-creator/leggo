@@ -6,7 +6,7 @@ const FONTS={
  'Georgia':'Georgia,"Times New Roman",serif','Palatino':'"Palatino Linotype",Palatino,"Book Antiqua",serif',
  'Atkinson':'"Atkinson Hyperlegible",system-ui,sans-serif','Sans':'system-ui,-apple-system,Roboto,sans-serif','Mono':'ui-monospace,Menlo,Consolas,monospace'
 };
-const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1};
+const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1,pin:false};
 let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
   tts:{engine:'device',voice:'',okey:'',ovoice:'coral',omodel:'gpt-4o-mini-tts'}};
 try{const r=localStorage.getItem(SKEY);if(r){const o=JSON.parse(r);S={...S,...o,set:{...DEF,...(o.set||{})},tts:{...S.tts,...(o.tts||{})}}}}catch(e){}
@@ -29,12 +29,18 @@ const pctTxt=f=>f<=0?'0%':f<.01?'<1%':Math.round(f*100)+'%';
 const dur=w=>{const m=Math.max(1,Math.round(w/S.wpm));return m>=60?Math.floor(m/60)+' h '+(m%60?String(m%60).padStart(2,'0')+' min':''):m+' min'};
 const statusOf=b=>{const s=S.bk[b.id];return s&&s.done?'done':s&&s.w>0?'reading':'new'};
 function ensureDay(id){const s=BK(id);const t=todayISO();if(!s.ds||s.ds.d!==t)s.ds={d:t,w:s.w};return s.ds}
-function planInfo(b){
+function planInfo(b,liveW){
   const s=S.bk[b.id];if(!s||!s.goal||s.done)return null;
-  const t=todayISO(),ds=ensureDay(b.id),dl=dayDiff(t,s.goal.end)+1,late=dl<1,days=Math.max(1,dl);
-  const perW=Math.max(0,b.words-ds.w)/days,readW=(S.log[t]&&S.log[t][b.id])||0,pg=b.words?pagesOf(b)/b.words:0;
-  return {days,late,perW,perP:perW*pg,readW,readP:readW*pg,fromP:Math.round(ds.w*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round((ds.w+perW)*pg))),end:s.goal.end,ok:readW>=perW*.98};
+  const g=s.goal,t=todayISO(),n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),w0=Math.min(g.w0||0,b.words);
+  const raw=dayDiff(g.start,t),late=raw>=n,L=Math.max(0,Math.min(n-1,raw));
+  const step=(b.words-w0)/n,fromW=w0+L*step,toW=L===n-1?b.words:w0+(L+1)*step,cur=liveW==null?s.w:liveW;
+  const pg=b.words?pagesOf(b)/b.words:0,readW=Math.max(0,Math.min(step,cur-fromW));
+  return {n,L:L+1,late,days:Math.max(0,n-raw),fromW,toW,perW:step,perP:step*pg,readW,readP:readW*pg,pctDay:step>0?readW/step:1,
+    behindP:Math.max(0,fromW-cur)*pg,fromP:Math.round(fromW*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round(toW*pg))),end:g.end,ok:cur>=toW-step*.02};
 }
+function lessonAt(b,i){const g=BK(b.id).goal;if(!g)return null;const n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),w0=Math.min(g.w0||0,b.words),step=(b.words-w0)/n;
+  const pg=b.words?pagesOf(b)/b.words:0,fw=w0+i*step,tw=i===n-1?b.words:w0+(i+1)*step;return {i,n,fw,tw,date:addDays(g.start,i),fromP:Math.round(fw*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round(tw*pg)))}}
+function chapterAtW(b,w){let c=b.chapters.length-1;for(let i=0;i<b.chapters.length;i++){if(w<b.chapters[i].w0+b.chapters[i].n){c=i;break}}return c}
 function commitProgress(w){
   const b=R.b,s=BK(R.id);ensureDay(R.id);const prev=s.w;s.w=Math.max(0,Math.min(b.words,w));
   if(s.w>s.max){const inc=s.w-s.max;if(inc<=2500&&s.w-prev<=2500){const t=todayISO();S.log[t]=S.log[t]||{};S.log[t][R.id]=(S.log[t][R.id]||0)+inc}s.max=s.w}
@@ -89,7 +95,7 @@ function rLib(){
     const cur=S.last&&bookById(S.last);
     if(cur&&statusOf(cur)==='reading'){
       const p=planInfo(cur);
-      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p?' · oggi '+Math.min(Math.round(p.readP),Math.round(p.perP))+'/'+Math.max(1,Math.round(p.perP))+' pag.':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
+      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p?' · lezione '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
     }
     const fl=[['all','Tutti'],['reading','In lettura'],['new','Da leggere'],['done','Letti']];
     h+='<div class="row wrap">'+fl.map(f=>'<button class="chip'+(S.filter===f[0]?' on':'')+'" data-f="'+f[0]+'">'+f[1]+'</button>').join('')+'</div>';
@@ -173,7 +179,7 @@ function goalSheet(b){
   const endOf=()=>mode==='days'?addDays(todayISO(),Math.max(1,n)-1):mode==='weeks'?addDays(todayISO(),Math.max(1,n)*7-1):date;
   const draw=box=>{
     const end=endOf(),days=Math.max(1,dayDiff(todayISO(),end)+1),remW=Math.max(0,b.words-s.w),pg=pagesOf(b)/b.words;
-    $('#g-pv',box).innerHTML=dayDiff(todayISO(),end)<0?'<span class="warn">La data è già passata.</span>':'Finire entro <b>'+fmtDateY(end)+'</b>. Mancano '+Math.round(remW*pg)+' pagine su '+pagesOf(b)+': circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine al giorno</b>, '+dur(remW/days)+' di lettura.';
+    $('#g-pv',box).innerHTML=dayDiff(todayISO(),end)<0?'<span class="warn">La data è già passata.</span>':'Finire entro <b>'+fmtDateY(end)+'</b>. Il libro viene diviso in <b>'+days+(days===1?' lezione':' lezioni')+'</b>, una al giorno: circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine</b> ciascuna, '+dur(remW/days)+' di lettura. Le trovi in Indice > Giorni.';
     $('#g-n',box).hidden=mode==='date';$('#g-d',box).hidden=mode!=='date';
     box.querySelectorAll('#g-m button').forEach(x=>x.classList.toggle('on',x.dataset.v===mode));
   };
@@ -181,7 +187,7 @@ function goalSheet(b){
     draw(box);
     box.querySelectorAll('#g-m button').forEach(x=>x.onclick=()=>{mode=x.dataset.v;draw(box)});
     $('#g-nv',box).oninput=e=>{n=+e.target.value||1;draw(box)};$('#g-dv',box).onchange=e=>{date=e.target.value||date;draw(box)};
-    $('#g-s',box).onclick=()=>{if(dayDiff(todayISO(),endOf())<0)return toast('Scegli una data futura');s.goal={mode,n,end:endOf(),start:todayISO()};s.ds={d:todayISO(),w:s.w};save();closeSheet(()=>{go(curView);toast('Obiettivo salvato')})};
+    $('#g-s',box).onclick=()=>{if(dayDiff(todayISO(),endOf())<0)return toast('Scegli una data futura');s.goal={mode,n,end:endOf(),start:todayISO(),w0:s.w,tot:Math.max(1,dayDiff(todayISO(),endOf())+1)};s.ds={d:todayISO(),w:s.w};save();closeSheet(()=>{go(curView);toast('Obiettivo salvato')})};
     const r=$('#g-r',box);if(r)r.onclick=()=>{s.goal=null;save();closeSheet(()=>go(curView))}})
 }
 
@@ -194,10 +200,10 @@ function rOggi(){
   h+='<div class="card stack"><div class="stat"><div><b class="tab">'+Math.round(tw/Math.max(1,S.wpm))+'</b><span class="small mute">minuti letti</span></div><div><b class="tab">'+streak()+'</b><span class="small mute">giorni di fila</span></div><div><b class="tab">'+LIB.filter(b=>statusOf(b)==='done').length+'</b><span class="small mute">libri letti</span></div></div></div>';
   if(!plans.length)h+='<div class="empty stack"><div class="mute">Nessun obiettivo attivo. Apri un libro dalla libreria e imposta in quanti giorni o settimane vuoi finirlo: qui vedrai quante pagine leggere ogni giorno.</div></div>';
   plans.forEach(({b,p})=>{
-    const f=p.perP>0?Math.min(1,p.readP/p.perP):1;
+    const f=p.pctDay;
     h+='<button class="card stack" data-o="'+b.id+'" style="text-align:left"><div class="lrow">'+coverHtml(b)+'<div class="grow"><div style="font-family:var(--disp);font-size:17px;font-weight:600;line-height:1.2">'+esc(b.title)+'</div>'
-     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">Entro il '+fmtDate(p.end)+' · '+p.days+(p.days===1?' giorno':' giorni')+'</div>')
-     +'<div style="margin-top:6px;font-size:15px">'+(p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+' pagine, '+dur(p.perW)+')</span>')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">Letto oggi '+Math.round(p.readP)+' pag. · libro al '+pctTxt(frac(b))+'</div></button>';
+     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">Lezione <b>'+p.L+'</b> di '+p.n+' · entro il '+fmtDate(p.end)+'</div>')
+     +'<div style="margin-top:6px;font-size:15px">'+(p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+(Math.round(p.perP)<=1?' pagina, ':' pagine, ')+dur(p.perW)+')</span>')+(p.behindP>=1&&!p.late?'<div class="small warn">Indietro di '+Math.round(p.behindP)+' pagine rispetto alle lezioni precedenti</div>':'')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">Lezione di oggi al '+Math.round(f*100)+'% · libro al '+pctTxt(frac(b))+'</div></button>';
   });
   v.innerHTML=h+'</div>';
   v.querySelectorAll('[data-o]').forEach(e=>e.onclick=()=>openBook(e.dataset.o));
@@ -317,7 +323,7 @@ function applyFmt(){
   t.setProperty('--rf',FONTS[s.fam]||FONTS.Georgia);t.setProperty('--fs',s.fs+'px');t.setProperty('--lh',s.lh);t.setProperty('--ps',s.ps+'em');t.setProperty('--fw',s.fw);
   t.setProperty('--ta',s.ta);t.setProperty('--hy',s.hy?'auto':'manual');t.setProperty('--ti',s.ti+'em');
   t.setProperty('--mt',s.mt+'px');t.setProperty('--mb',s.mb+'px');t.setProperty('--ml',s.ml+'px');t.setProperty('--mr',s.mr+'px');
-  $('#reader').classList.toggle('paged',s.mode==='pages');$('#rtext').lang='it';applyTheme()
+  $('#reader').classList.toggle('paged',s.mode==='pages');$('#reader').classList.toggle('pinbar',!!s.pin);$('#rtext').lang='it';applyTheme()
 }
 async function openBook(id,loc){
   const b=bookById(id);if(!b)return;
@@ -353,6 +359,9 @@ function drawChapter(c){
   const root=$('#rtext');
   s.ann.filter(a=>a.c===c).forEach(a=>{const el=root.querySelector(':scope > [data-i="'+a.b+'"]');if(el)wrapRange(el,a.s,a.e,annClass(a),a.gid)});
   s.bm.filter(x=>x.c===c).forEach(x=>{const el=root.querySelector(':scope > [data-i="'+x.b+'"]');if(el)el.classList.add('bmk')});
+  const pl=planInfo(R.b);
+  if(pl&&!pl.late&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){const tw=pl.toW-R.b.chapters[c].w0;let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});const el=root.querySelector(':scope > [data-i="'+bi+'"]');
+    if(el){const m=document.createElement('div');m.className='lesson-end';m.textContent='Fine della lezione di oggi ('+pl.L+' di '+pl.n+')';el.after(m)}}
   $('#r-title').textContent=R.b.title;
   const n=$('#c-next');if(n)n.onclick=()=>chapterStep(1);
   const dd=$('#d-done');if(dd)dd.onclick=()=>{const x=BK(R.id);x.done=true;x.w=R.b.words;x.max=R.b.words;save();drawChapter(R.c);toast('Libro letto')};
@@ -399,8 +408,8 @@ function updateInfo(){
   if(!R.b)return;const b=R.b,w=curW(),f=b.words?Math.min(1,w/b.words):0;
   if(!R.seekDrag)$('#r-seek').value=Math.round(f*1000);
   const pg=b.ext==='pdf'&&R.pgNow?R.pgNow:Math.max(1,Math.min(pagesOf(b),Math.round(f*pagesOf(b))||1));
-  const p=planInfo(b);
-  $('#r-info').textContent='Cap. '+(R.c+1)+'/'+b.chapters.length+' · '+pctTxt(f)+' · pag. '+pg+' di '+pagesOf(b)+' · '+dur(b.words-w)+(p?' · oggi '+Math.min(Math.round(p.readP),Math.max(1,Math.round(p.perP)))+'/'+Math.max(1,Math.round(p.perP)):'');
+  const p=planInfo(b,w);
+  $('#r-info').textContent='Cap. '+(R.c+1)+'/'+b.chapters.length+' · '+pctTxt(f)+' · pag. '+pg+' di '+pagesOf(b)+' · '+dur(b.words-w)+(p?' · lezione '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':'');
   $('#r-tp').style.width=(f*100)+'%'
 }
 $('#rscroll').addEventListener('scroll',()=>{
@@ -503,9 +512,14 @@ function annSheet(gid){
 /* ---------- indice, segnalibri, note, cerca nel libro ---------- */
 function tocSheet(tab){
   tab=tab||'cap';const b=R.b,s=BK(R.id);
-  const tabs=[['cap','Capitoli'],['bm','Segnalibri'],['ann','Note'],['find','Cerca']];
+  const tabs=[['cap','Capitoli'],['gg','Giorni'],['bm','Segnalibri'],['ann','Note'],['find','Cerca']];
   let body='';
   if(tab==='cap')body='<div class="list">'+b.chapters.map((c,i)=>'<button class="item" data-c="'+i+'" style="'+(i===R.c?'color:var(--acc);font-weight:600':'')+'"><span class="grow">'+esc(c.t)+'</span><span class="small mute tab">'+pctTxt(c.w0/b.words)+'</span></button>').join('')+'</div>';
+  else if(tab==='gg'){const g=s.goal;if(!g)body='<div class="mute">Nessun obiettivo per questo libro. Impostalo da Libreria > Obiettivo di lettura.</div>';
+    else{const n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),pi=planInfo(b,curW()),cw=curW();body='<div class="list">';
+      for(let i=0;i<n;i++){const l=lessonAt(b,i),isT=pi&&pi.L===i+1,dn=cw>=l.tw-1;
+        body+='<button class="item" data-w="'+l.fw+'" style="'+(isT?'color:var(--acc);font-weight:600':'')+'"><span class="grow">Giorno '+(i+1)+' · '+fmtDate(l.date)+'<br><span class="small mute">pag. '+l.fromP+' - '+l.toP+' · '+esc(b.chapters[chapterAtW(b,l.fw)].t)+'</span></span><span class="small tab">'+(dn?'letto':isT?'oggi':'')+'</span></button>'}
+      body+='</div>'}}
   else if(tab==='bm')body=s.bm.length?s.bm.slice().sort((x,y)=>x.c-y.c||x.b-y.b).map(x=>'<button class="stack" data-c="'+x.c+'" data-b="'+x.b+'" style="text-align:left;border-bottom:1px solid var(--line);padding-bottom:8px"><span class="small" style="color:var(--acc);font-weight:600">'+esc(b.chapters[x.c].t)+'</span><span class="small">'+esc(x.t||'')+'</span></button>').join(''):'<div class="mute">Nessun segnalibro. Seleziona del testo e tocca Segnalibro.</div>';
   else if(tab==='ann'){const seen=new Set();const items=[];s.ann.forEach(a=>{if(seen.has(a.gid))return;seen.add(a.gid);const all=s.ann.filter(x=>x.gid===a.gid);if(all[0].col||all.some(x=>x.txt)||all[0].k==='q')items.push(all)});
     items.sort((x,y)=>x[0].c-y[0].c||x[0].b-y[0].b);
@@ -515,6 +529,7 @@ function tocSheet(tab){
     box.querySelectorAll('#t-seg button').forEach(x=>x.onclick=()=>tocSheet(x.dataset.t));
     const jump=(c,bi)=>closeSheet(()=>{const a=getAnchor();if(a)R.back=a;savePos();restoreAnchor({c,b:bi,off:20});if(R.back)banner('Hai cambiato punto',[{l:'Torna dov’ero',fn:()=>{restoreAnchor(R.back);savePos()}}],8000);savePos()});
     box.querySelectorAll('[data-c]').forEach(e=>e.onclick=()=>jump(+e.dataset.c,e.dataset.b!=null?+e.dataset.b:0));
+    box.querySelectorAll('[data-w]').forEach(e=>e.onclick=()=>closeSheet(()=>jumpW(+e.dataset.w)));
     if(tab==='find'){
       const run=()=>{const q=norm($('#fq',box).value.trim());if(q.length<3){$('#fi',box).textContent=q?'Scrivi almeno 3 lettere':'';$('#fr',box).innerHTML='';return}
         if(!R.idx){R.idx=[];R.content.forEach((h,c)=>[...htmlBody(h).children].forEach((el,bi)=>{const t=el.textContent.replace(/\s+/g,' ').trim();if(t)R.idx.push({c,b:bi,t,n:norm(t)})}))}
@@ -542,6 +557,7 @@ function fmtSheet(){
   +rng('f-fs','Dimensione',12,36,1,s.fs,' px')+rng('f-lh','Interlinea',1.1,2.4,.05,s.lh)+rng('f-ps','Spazio tra paragrafi',0,2,.1,s.ps,' em')+rng('f-fw','Spessore',300,700,100,s.fw)+rng('f-ti','Rientro prima riga',0,3,.25,s.ti,' em')
   +'<div class="field"><label>Allineamento</label>'+segb('f-ta',[['justify','Giustificato'],['left','A sinistra']],s.ta)+'</div>'
   +'<label class="row"><span class="grow">Sillabazione</span><input type="checkbox" id="f-hy"'+(s.hy?' checked':'')+'></label>'
+  +'<label class="row"><span class="grow">Barra di avanzamento sempre visibile<br><span class="small mute">Resta in basso anche a schermo intero</span></span><input type="checkbox" id="f-pin"'+(s.pin?' checked':'')+'></label>'
   +'<h3>Margini</h3>'+rng('f-mt','Alto',0,80,1,s.mt,' px')+rng('f-mb','Basso',0,80,1,s.mb,' px')+rng('f-ml','Sinistro',0,80,1,s.ml,' px')+rng('f-mr','Destro',0,80,1,s.mr,' px')
   +'<h3>Profili</h3><div class="row wrap">'+profs.map(p=>'<button class="chip" data-p="'+esc(p)+'">'+esc(p)+'</button>').join('')+'</div><div class="row"><input class="input grow" id="f-pn" type="text" placeholder="Nome del profilo (es. Notte)"><button class="btn sm" id="f-ps2">Salva</button></div>',box=>{
     const upd=(k,v,redraw)=>{S.set[k]=v;save();applyFmt();if(redraw)refresh();else layoutPages()};
@@ -551,6 +567,7 @@ function fmtSheet(){
     const bindS=(id,k,cb)=>box.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{box.querySelectorAll('#'+id+' button').forEach(x=>x.classList.toggle('on',x===b));upd(k,b.dataset.v);if(cb)cb()});
     bindS('f-theme','theme');bindS('f-ta','ta');bindS('f-mode','mode',()=>{applyFmt();refresh()});
     $('#f-hy',box).onchange=e=>upd('hy',e.target.checked);
+    $('#f-pin',box).onchange=e=>{upd('pin',e.target.checked);setTimeout(layoutPages,260)};
     box.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{S.set={...DEF,...S.profiles[b.dataset.p]};save();applyFmt();refresh();fmtSheet()});
     $('#f-ps2',box).onclick=()=>{const n=$('#f-pn',box).value.trim();if(!n)return toast('Scrivi un nome');S.profiles[n]={...S.set};save();toast('Profilo salvato');fmtSheet()}})
 }
