@@ -274,12 +274,12 @@ function dataObj(withKeys){
   const copy=JSON.parse(JSON.stringify({...S,sess:null}));if(!withKeys){copy.key='';copy.tts.okey=''}
   return {app:'leggo',v:1,date:todayISO(),S:copy,books:LIB.map(b=>({id:b.id,title:b.title,author:b.author,ext:b.ext}))}
 }
-function exportData(){try{S.lastBackup=todayISO();save();download(new Blob([JSON.stringify(dataObj(true))],{type:'application/json'}),'leggo-dati-'+todayISO()+'.json');toast('Copia scaricata');rAltro()}catch(e){toast('Download non disponibile')}}
+function exportData(){try{S.lastBackup=todayISO();save();download(new Blob([JSON.stringify(dataObj(true))],{type:'application/json'}),'ebook1000-dati-'+todayISO()+'.json');toast('Copia scaricata');rAltro()}catch(e){toast('Download non disponibile')}}
 async function exportZip(){
   try{
     S.lastBackup=todayISO();save();const files=[{name:'leggo.json',data:new TextEncoder().encode(JSON.stringify(dataObj(true)))}];
     for(let i=0;i<LIB.length;i++){impUI('Preparo la copia completa',i/LIB.length,LIB[i].title);await tick();const f=await IDB.get('files',LIB[i].id);if(f)files.push({name:'books/'+LIB[i].id+'.'+LIB[i].ext,data:f})}
-    const z=await Zip.write(files);$('#imp').classList.remove('on');download(z,'leggo-completo-'+todayISO()+'.zip');toast('Copia completa scaricata');rAltro()
+    const z=await Zip.write(files);$('#imp').classList.remove('on');download(z,'ebook1000-completo-'+todayISO()+'.zip');toast('Copia completa scaricata');rAltro()
   }catch(e){$('#imp').classList.remove('on');toast('Errore: '+(e.message||'copia non riuscita'))}
 }
 function mergeData(o){
