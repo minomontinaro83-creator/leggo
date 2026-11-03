@@ -1,4 +1,5 @@
 "use strict";
+const VERSION='1.4';
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -31,13 +32,15 @@ const statusOf=b=>{const s=S.bk[b.id];return s&&s.done?'done':s&&s.w>0?'reading'
 function ensureDay(id){const s=BK(id);const t=todayISO();if(!s.ds||s.ds.d!==t)s.ds={d:t,w:s.w};return s.ds}
 function planInfo(b,liveW){
   const s=S.bk[b.id];if(!s||!s.goal||s.done)return null;
-  const g=s.goal,t=todayISO(),n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),w0=Math.min(g.w0||0,b.words);
-  const raw=dayDiff(g.start,t),late=raw>=n,L=Math.max(0,Math.min(n-1,raw));
-  const step=(b.words-w0)/n,fromW=w0+L*step,toW=L===n-1?b.words:w0+(L+1)*step,cur=liveW==null?s.w:liveW;
-  const pg=b.words?pagesOf(b)/b.words:0,readW=Math.max(0,Math.min(step,cur-fromW));
-  return {n,L:L+1,late,days:Math.max(0,n-raw),fromW,toW,perW:step,perP:step*pg,readW,readP:readW*pg,pctDay:step>0?readW/step:1,
-    behindP:Math.max(0,fromW-cur)*pg,fromP:Math.round(fromW*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round(toW*pg))),end:g.end,ok:cur>=toW-step*.02};
+  const g=s.goal,t=todayISO(),td=g.pausedOn||t,n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),w0=Math.min(g.w0||0,b.words);
+  const raw=dayDiff(g.start,td),wait=raw<0,late=raw>=n,L=Math.max(0,Math.min(n-1,raw));
+  const step=(b.words-w0)/n,pg=b.words?pagesOf(b)/b.words:0,ds=ensureDay(b.id);
+  const k=wait?0:Math.max(0,Math.min(L,Math.floor((ds.w-w0)/step+1e-6)));
+  const fromW=w0+k*step,toW=L===n-1?b.words:w0+(L+1)*step,cur=liveW==null?s.w:liveW,span=Math.max(1,toW-fromW),readW=Math.max(0,Math.min(span,cur-fromW));
+  return {n,L:L+1,K:k+1,nb:L-k+1,wait,paused:!!g.pausedOn,startsOn:g.start,late,days:Math.max(0,n-raw),fromW,toW,perW:span,perP:span*pg,readW,readP:readW*pg,pctDay:readW/span,
+    fromP:Math.round(fromW*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round(toW*pg))),end:g.end,ok:!wait&&cur>=toW-step*.02};
 }
+const tapLbl=p=>p.nb>1?'Tappe '+p.K+'-'+p.L:'Tappa '+p.L;
 function lessonAt(b,i){const g=BK(b.id).goal;if(!g)return null;const n=Math.max(1,g.tot||dayDiff(g.start,g.end)+1),w0=Math.min(g.w0||0,b.words),step=(b.words-w0)/n;
   const pg=b.words?pagesOf(b)/b.words:0,fw=w0+i*step,tw=i===n-1?b.words:w0+(i+1)*step;return {i,n,fw,tw,date:addDays(g.start,i),fromP:Math.round(fw*pg)+1,toP:Math.min(pagesOf(b),Math.max(1,Math.round(tw*pg)))}}
 function chapterAtW(b,w){let c=b.chapters.length-1;for(let i=0;i<b.chapters.length;i++){if(w<b.chapters[i].w0+b.chapters[i].n){c=i;break}}return c}
@@ -95,7 +98,7 @@ function rLib(){
     const cur=S.last&&bookById(S.last);
     if(cur&&statusOf(cur)==='reading'){
       const p=planInfo(cur);
-      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p?' · tappa '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
+      h+='<button class="card row lrow hero" id="cont" style="gap:14px">'+coverHtml(cur)+'<div class="grow"><div class="eyebrow">Continua a leggere</div><div style="font-family:var(--disp);font-size:19px;font-weight:600;line-height:1.2;margin:2px 0">'+esc(cur.title)+'</div><div class="small mute">'+pctTxt(frac(cur))+(p&&!p.paused&&!p.wait?' · tappa '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%':' · '+dur(cur.words*(1-frac(cur)))+' rimanenti')+'</div><div class="bar" style="margin-top:8px"><i style="width:'+frac(cur)*100+'%"></i></div></div></button>';
     }
     const fl=[['all','Tutti'],['reading','In lettura'],['new','Da leggere'],['done','Letti']];
     h+='<div class="row wrap">'+fl.map(f=>'<button class="chip'+(S.filter===f[0]?' on':'')+'" data-f="'+f[0]+'">'+f[1]+'</button>').join('')+'</div>';
@@ -175,20 +178,27 @@ function removeSheet(b){
     $('#r1',box).onclick=()=>doit(false);$('#r2',box).onclick=()=>doit(true)})
 }
 function goalSheet(b){
-  const s=BK(b.id),g=s.goal;let mode=g?g.mode:'days',n=g?g.n:30,date=g&&g.mode==='date'?g.end:addDays(todayISO(),30);
-  const endOf=()=>mode==='days'?addDays(todayISO(),Math.max(1,n)-1):mode==='weeks'?addDays(todayISO(),Math.max(1,n)*7-1):date;
+  const s=BK(b.id),g=s.goal;let mode=g&&g.mode!=='date'?g.mode:(g?'date':'days'),n=g?g.n:30,date=g&&g.mode==='date'?g.end:addDays(todayISO(),30),sd=todayISO();
+  const endOf=()=>mode==='days'?addDays(sd,Math.max(1,n)-1):mode==='weeks'?addDays(sd,Math.max(1,n)*7-1):date;
   const draw=box=>{
-    const end=endOf(),days=Math.max(1,dayDiff(todayISO(),end)+1),remW=Math.max(0,b.words-s.w),pg=pagesOf(b)/b.words;
-    $('#g-pv',box).innerHTML=dayDiff(todayISO(),end)<0?'<span class="warn">La data è già passata.</span>':'Finire entro <b>'+fmtDateY(end)+'</b>. Il libro viene diviso in <b>'+days+(days===1?' tappa':' tappe')+'</b>, una al giorno: circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine</b> ciascuna, '+dur(remW/days)+' di lettura. Le trovi in Indice > Giorni.';
+    const end=endOf(),days=dayDiff(sd,end)+1,remW=Math.max(0,b.words-s.w),pg=pagesOf(b)/b.words;
+    $('#g-pv',box).innerHTML=days<1?'<span class="warn">La data di fine deve essere dopo la partenza.</span>':'Parti il <b>'+fmtDate(sd)+'</b> dalla pagina '+Math.round(s.w*pg+1)+', finisci entro <b>'+fmtDateY(end)+'</b>. Il libro viene diviso in <b>'+days+(days===1?' tappa':' tappe')+'</b>, una al giorno: circa <b>'+Math.max(1,Math.round(remW*pg/days))+' pagine</b> ciascuna, '+dur(remW/days)+' di lettura. Le trovi in Indice > Giorni.';
     $('#g-n',box).hidden=mode==='date';$('#g-d',box).hidden=mode!=='date';
     box.querySelectorAll('#g-m button').forEach(x=>x.classList.toggle('on',x.dataset.v===mode));
   };
-  sheet('<div class="hd"><h3>Obiettivo di lettura</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+esc(b.title)+'</div><div class="seg" id="g-m"><button data-v="days">Giorni</button><button data-v="weeks">Settimane</button><button data-v="date">Data</button></div><div class="field" id="g-n"><label for="g-nv">Quanti '+'giorni o settimane hai a disposizione</label><input id="g-nv" type="number" min="1" max="999" value="'+n+'"></div><div class="field" id="g-d"><label for="g-dv">Finire entro</label><input id="g-dv" type="date" value="'+date+'" min="'+todayISO()+'"></div><div class="small" id="g-pv"></div><div class="row"><button class="btn grow" id="g-s">Salva</button>'+(g?'<button class="btn sec" id="g-r">Rimuovi</button>':'')+'</div>',box=>{
+  const manage=g?'<h3>Gestisci</h3><div class="stack"><button class="btn sec" id="g-p">'+(g.pausedOn?'Riprendi (le tappe slittano di '+Math.max(0,dayDiff(g.pausedOn,todayISO()))+' giorni)':'Metti in pausa')+'</button><button class="btn sec" id="g-z">Azzera la lettura e riparti da zero</button><button class="btn sec" id="g-r" style="color:var(--warn);border-color:var(--warn)">Rimuovi obiettivo</button></div>':'';
+  sheet('<div class="hd"><h3>Obiettivo di lettura</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+esc(b.title)+(g?' · le impostazioni qui sotto ricalcolano le tappe dal punto in cui sei ora':'')+'</div><div class="seg" id="g-m"><button data-v="days">Giorni</button><button data-v="weeks">Settimane</button><button data-v="date">Data</button></div><div class="field" id="g-n"><label for="g-nv">Quanti giorni o settimane hai a disposizione</label><input id="g-nv" type="number" min="1" max="999" value="'+n+'"></div><div class="field" id="g-d"><label for="g-dv">Finire entro</label><input id="g-dv" type="date" value="'+date+'" min="'+todayISO()+'"></div><div class="field"><label for="g-sv">Parti da</label><input id="g-sv" type="date" value="'+sd+'" min="'+todayISO()+'"></div><div class="small" id="g-pv"></div><button class="btn" id="g-s">'+(g?'Riparti da qui':'Avvia la lettura')+'</button>'+manage,box=>{
     draw(box);
     box.querySelectorAll('#g-m button').forEach(x=>x.onclick=()=>{mode=x.dataset.v;draw(box)});
-    $('#g-nv',box).oninput=e=>{n=+e.target.value||1;draw(box)};$('#g-dv',box).onchange=e=>{date=e.target.value||date;draw(box)};
-    $('#g-s',box).onclick=()=>{if(dayDiff(todayISO(),endOf())<0)return toast('Scegli una data futura');s.goal={mode,n,end:endOf(),start:todayISO(),w0:s.w,tot:Math.max(1,dayDiff(todayISO(),endOf())+1)};s.ds={d:todayISO(),w:s.w};save();closeSheet(()=>{go(curView);toast('Obiettivo salvato')})};
+    $('#g-nv',box).oninput=e=>{n=+e.target.value||1;draw(box)};$('#g-dv',box).onchange=e=>{date=e.target.value||date;draw(box)};$('#g-sv',box).onchange=e=>{sd=e.target.value||todayISO();draw(box)};
+    $('#g-s',box).onclick=()=>{const tot=dayDiff(sd,endOf())+1;if(tot<1)return toast('Controlla le date');s.goal={mode,n,end:endOf(),start:sd,w0:s.w,tot};s.ds={d:todayISO(),w:s.w};save();closeSheet(()=>{go(curView);toast(sd>todayISO()?'La lettura parte il '+fmtDate(sd):'Lettura avviata')})};
+    const p=$('#g-p',box);if(p)p.onclick=()=>{if(g.pausedOn){const d=Math.max(0,dayDiff(g.pausedOn,todayISO()));g.start=addDays(g.start,d);g.end=addDays(g.end,d);delete g.pausedOn;s.ds=null;ensureDay(b.id)}else g.pausedOn=todayISO();save();closeSheet(()=>{go(curView);toast(g.pausedOn?'Libro in pausa':'Lettura ripresa')})};
+    const z=$('#g-z',box);if(z)z.onclick=()=>zeroSheet(b);
     const r=$('#g-r',box);if(r)r.onclick=()=>{s.goal=null;save();closeSheet(()=>go(curView))}})
+}
+function zeroSheet(b){
+  sheet('<div class="hd"><h3>Azzerare la lettura?</h3></div><div class="small mute">Il libro torna alla pagina 1 e le tappe ricominciano da oggi con la stessa durata. Segnalibri, note ed evidenziazioni restano.</div><div class="stack"><button class="btn" id="z1">Azzera e riparti da oggi</button><button class="btn sec" data-x>Annulla</button></div>',box=>{
+    $('#z1',box).onclick=()=>{const s=BK(b.id),g=s.goal;s.w=0;s.max=0;s.done=false;s.pos=null;s.ds={d:todayISO(),w:0};if(g){const tot=Math.max(1,g.tot||dayDiff(g.start,g.end)+1);S.bk[b.id].goal={mode:'days',n:tot,end:addDays(todayISO(),tot-1),start:todayISO(),w0:0,tot}}save();closeSheet(()=>{go(curView);toast('Lettura azzerata')})}})
 }
 
 /* ================= Oggi ================= */
@@ -202,8 +212,8 @@ function rOggi(){
   plans.forEach(({b,p})=>{
     const f=p.pctDay;
     h+='<button class="card stack" data-o="'+b.id+'" style="text-align:left"><div class="lrow">'+coverHtml(b)+'<div class="grow"><div style="font-family:var(--disp);font-size:17px;font-weight:600;line-height:1.2">'+esc(b.title)+'</div>'
-     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">Tappa <b>'+p.L+'</b> di '+p.n+' · entro il '+fmtDate(p.end)+'</div>')
-     +'<div style="margin-top:6px;font-size:15px">'+(p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+(Math.round(p.perP)<=1?' pagina, ':' pagine, ')+dur(p.perW)+')</span>')+(p.behindP>=1&&!p.late?'<div class="small warn">Indietro di '+Math.round(p.behindP)+' pagine rispetto alle tappe precedenti</div>':'')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">Tappa di oggi al '+Math.round(f*100)+'% · libro al '+pctTxt(frac(b))+'</div></button>';
+     +(p.late?'<div class="small warn">Scadenza passata il '+fmtDate(p.end)+'</div>':'<div class="small mute">'+(p.paused?'<b style="color:var(--warn)">In pausa</b> · ':p.wait?'<b>Parte il '+fmtDate(p.startsOn)+'</b> · ':'')+'<b>'+tapLbl(p)+'</b> di '+p.n+' · entro il '+fmtDate(p.end)+'</div>')
+     +'<div style="margin-top:6px;font-size:15px">'+(p.paused?'<span class="mute">Riprendi dal libro: Obiettivo di lettura</span>':p.wait?'Prima tappa pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b>':p.ok?'<b style="color:var(--ok)">Obiettivo di oggi raggiunto</b>':'Oggi pag. <b>'+p.fromP+'</b> - <b>'+p.toP+'</b> <span class="mute">('+Math.max(1,Math.round(p.perP))+(Math.round(p.perP)<=1?' pagina, ':' pagine, ')+dur(p.perW)+')</span>')+(p.nb>1&&!p.ok&&!p.paused&&!p.wait?'<div class="small warn">'+(p.nb-1)+(p.nb===2?' tappa arretrata':' tappe arretrate')+' sommate a quella di oggi</div>':'')+'</div></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">'+(p.nb>1?'Tappe sommate':'Tappa di oggi')+' al '+Math.round(f*100)+'% · libro al '+pctTxt(frac(b))+'</div></button>';
   });
   v.innerHTML=h+'</div>';
   v.querySelectorAll('[data-o]').forEach(e=>e.onclick=()=>openBook(e.dataset.o));
@@ -250,12 +260,15 @@ function rAltro(){
   +'<div class="card stack"><h3>Intelligenza artificiale</h3><div class="field"><label for="k">Chiave API Claude</label><input id="k" type="password" autocomplete="off" class="input" value="'+esc(S.key)+'"></div><div class="field"><label for="m">Modello</label><input id="m" class="input" type="text" value="'+esc(S.model)+'"></div><label class="row"><span class="grow">Cerca sul web nelle spiegazioni</span><input type="checkbox" id="w"'+(S.web?' checked':'')+'></label><div class="small mute">La chiave resta solo su questo dispositivo.</div></div>'
   +'<div class="card stack"><h3>Lettura</h3><div class="field"><div class="row"><label for="wpm" class="grow">Parole al minuto</label><span class="small mute tab" id="wpmv">'+S.wpm+'</span></div><input id="wpm" type="range" min="100" max="400" step="10" value="'+S.wpm+'"></div><div class="field"><div class="row"><label for="wpp" class="grow">Parole per pagina (libri senza pagine fisse)</label><span class="small mute tab" id="wppv">'+S.wpp+'</span></div><input id="wpp" type="range" min="150" max="400" step="10" value="'+S.wpp+'"></div></div>'
   +'<div class="card stack"><h3>Copia di sicurezza</h3><div class="small mute">Per cambiare telefono. La copia dei dati contiene segnalibri, note, evidenziazioni, progressi, obiettivi e impostazioni, chiavi API comprese. La copia completa contiene anche i libri.</div><div class="small tab" id="b-last">'+(S.lastBackup?'Ultima copia il '+fmtDateY(S.lastBackup):'Nessuna copia scaricata finora')+'</div><div class="row wrap"><button class="btn sec sm" id="b-exp">Scarica dati</button><button class="btn sec sm" id="b-zip">Scarica copia completa</button><button class="btn sec sm" id="b-imp">Importa</button></div></div>'
+  +'<div class="card stack"><h3>Versione</h3><div class="small tab" id="ver">Versione '+VERSION+'</div><div class="small mute" id="ver-s"></div><div class="row wrap"><button class="btn sec sm" id="ver-c">Controlla aggiornamenti</button><button class="btn sec sm" id="ver-u">Aggiorna ora</button></div><div class="small mute">L’aggiornamento non tocca libri, note, segnalibri e progressi.</div></div>'
   +'<div class="card stack"><h3>Spazio</h3><div class="small mute" id="stg">Calcolo…</div></div>'
   +'<div class="small mute">I libri restano sul telefono. Nessun file viene inviato a nessuno, salvo i brani che chiedi di spiegare all’AI.</div></div>';
   v.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>openLib(b.dataset.l));
   const ma=$('#m-add',v);if(ma)ma.onclick=()=>$('#fpick').click();
   $('#k').onchange=e=>{S.key=e.target.value.trim();save()};$('#m').onchange=e=>{S.model=e.target.value.trim()||'claude-haiku-5-5';save()};$('#w').onchange=e=>{S.web=e.target.checked;save()};
   $('#wpm').oninput=e=>{S.wpm=+e.target.value;$('#wpmv').textContent=S.wpm;save()};$('#wpp').oninput=e=>{S.wpp=+e.target.value;$('#wppv').textContent=S.wpp;save()};
+  $('#ver-c').onclick=async()=>{const e=$('#ver-s');e.textContent='Controllo…';const r=await remoteVersion();e.textContent=r==null?'Non riesco a controllare: serve la connessione.':r===VERSION?'Hai già l’ultima versione ('+VERSION+').':'Disponibile la versione '+r+'. Tocca Aggiorna ora.'};
+  $('#ver-u').onclick=applyUpdate;
   $('#b-exp').onclick=exportData;$('#b-zip').onclick=exportZip;$('#b-imp').onclick=importSheet;
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{const mb=x=>(x/1048576).toFixed(0);$('#stg').textContent='Occupati '+mb(e.usage)+' MB su circa '+mb(e.quota)+' disponibili.'}).catch(()=>{$('#stg').textContent=''});else $('#stg').textContent='';
 }
@@ -360,7 +373,7 @@ function drawChapter(c){
   s.ann.filter(a=>a.c===c).forEach(a=>{const el=root.querySelector(':scope > [data-i="'+a.b+'"]');if(el)wrapRange(el,a.s,a.e,annClass(a),a.gid)});
   s.bm.filter(x=>x.c===c).forEach(x=>{const el=root.querySelector(':scope > [data-i="'+x.b+'"]');if(el)el.classList.add('bmk')});
   const pl=planInfo(R.b);
-  if(pl&&!pl.late&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){const tw=pl.toW-R.b.chapters[c].w0;let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});const el=root.querySelector(':scope > [data-i="'+bi+'"]');
+  if(pl&&!pl.late&&!pl.paused&&!pl.wait&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){const tw=pl.toW-R.b.chapters[c].w0;let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});const el=root.querySelector(':scope > [data-i="'+bi+'"]');
     if(el){const m=document.createElement('div');m.className='lesson-end';m.textContent='Fine della tappa di oggi ('+pl.L+' di '+pl.n+')';el.after(m)}}
   $('#r-title').textContent=R.b.title;
   const n=$('#c-next');if(n)n.onclick=()=>chapterStep(1);
@@ -404,16 +417,16 @@ function savePos(){
 }
 function flushNow(){try{if($('#reader').classList.contains('open'))savePos();clearTimeout(st);localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}}
 let pgT=0;
-function barDay(p){return !!p&&S.set.bar==='day'}
+function barDay(p){return !!p&&!p.paused&&!p.wait&&S.set.bar==='day'}
 function updateInfo(){
   if(!R.b)return;const b=R.b,w=curW(),f=b.words?Math.min(1,w/b.words):0;
   const pg=b.ext==='pdf'&&R.pgNow?R.pgNow:Math.max(1,Math.min(pagesOf(b),Math.round(f*pagesOf(b))||1));
   const p=planInfo(b,w),day=barDay(p),mode=S.set.bar;
   if(!R.seekDrag)$('#r-seek').value=day?Math.round(Math.max(0,Math.min(1,p.pctDay))*1000):Math.round(f*1000);
   let t;
-  if(day){const pr=Math.round(p.pctDay*100);t='Tappa '+p.L+' di '+p.n+' · '+(p.ok?'completata':pr+'%')+' · pag. '+Math.max(p.fromP,Math.min(p.toP,pg))+' di '+p.fromP+'-'+p.toP+(p.ok?'':' · '+dur(p.toW-w)+' alla fine')}
+  if(day){const pr=Math.round(p.pctDay*100);t=tapLbl(p)+' di '+p.n+' · '+(p.ok?'completata':pr+'%')+' · pag. '+Math.max(p.fromP,Math.min(p.toP,pg))+' di '+p.fromP+'-'+p.toP+(p.ok?'':' · '+dur(p.toW-w)+' alla fine')}
   else{t='Cap. '+(R.c+1)+'/'+b.chapters.length+' · libro '+pctTxt(f)+' · pag. '+pg+' di '+pagesOf(b)+' · '+dur(b.words-w);
-    if(p&&mode==='both')t+=' · tappa '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%'}
+    if(p&&!p.paused&&!p.wait&&mode==='both')t+=' · '+tapLbl(p).toLowerCase()+' '+p.L+'/'+p.n+' al '+Math.round(p.pctDay*100)+'%'}
   $('#r-info').textContent=t;
   $('#r-tp').style.width=(f*100)+'%'
 }
@@ -695,9 +708,15 @@ $('#r-listen').onclick=listen;
 try{speechSynthesis.onvoiceschanged=()=>{}}catch(e){}
 
 function todayBanner(){
-  const pl=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p&&!x.p.ok&&!x.p.late).sort((x,y)=>(y.b.id===S.last)-(x.b.id===S.last))[0];
+  const pl=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p&&!x.p.ok&&!x.p.late&&!x.p.paused&&!x.p.wait).sort((x,y)=>(y.b.id===S.last)-(x.b.id===S.last))[0];
   if(!pl)return;const {b,p}=pl,t=b.title.length>28?b.title.slice(0,27)+'…':b.title;
-  banner('Oggi: tappa '+p.L+' di '+p.n+' di «'+t+'» · pag. '+p.fromP+'-'+p.toP,[{l:'Leggi',fn:()=>openBook(b.id)}],14000)
+  banner('Oggi: '+tapLbl(p).toLowerCase()+' di '+p.n+(p.nb>1?' ('+p.nb+' arretrate)':'')+' di «'+t+'» · pag. '+p.fromP+'-'+p.toP,[{l:'Leggi',fn:()=>openBook(b.id)}],14000)
+}
+async function remoteVersion(){try{const r=await fetch('app.js?v='+Date.now(),{cache:'no-store'});const m=/const VERSION='([^']+)'/.exec(await r.text());return m?m[1]:null}catch(e){return null}}
+async function applyUpdate(){
+  toast('Aggiorno…');flushNow();
+  try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs)await r.unregister()}if(window.caches){for(const k of await caches.keys())await caches.delete(k)}}catch(e){}
+  location.reload()
 }
 /* ================= avvio ================= */
 (async function boot(){
@@ -706,6 +725,7 @@ function todayBanner(){
   if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
   go('lib',true);
   setTimeout(()=>{if(!$('#reader').classList.contains('open')&&$('#resume').hidden)todayBanner()},900);
+  setTimeout(async()=>{const r=await remoteVersion();if(r&&r!==VERSION&&!$('#reader').classList.contains('open'))banner('Nuova versione '+r+' disponibile',[{l:'Aggiorna',fn:applyUpdate}],20000)},2500);
   const q=S.sess;if(!q)return;
   try{
     if(q.view&&q.view!=='lib'&&document.getElementById('v-'+q.view))go(q.view);
