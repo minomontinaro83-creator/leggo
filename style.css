@@ -169,3 +169,5 @@ input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--
 #lp .sp{display:inline-flex;align-items:center;gap:0;background:var(--card,rgba(127,127,127,.15));border-radius:20px}
 #lp .sp b{min-width:44px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
 #reader.immersive #lp{position:relative}
+.badge.pin{background:#f5b301;color:#222}
+.badge.pin{display:flex;align-items:center;padding:4px 6px}.pinic{display:inline-flex;vertical-align:-2px;color:#f5b301}
