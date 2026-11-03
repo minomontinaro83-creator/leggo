@@ -1,6 +1,6 @@
 "use strict";
-const VERSION='1.9';
-const NEWS={"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.10';
+const NEWS={"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -159,7 +159,7 @@ async function addFiles(files,overrides){
 }
 
 /* ---------- scheda libro, obiettivo, modifica, elimina ---------- */
-const PIN='<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M16 3a1 1 0 0 1 .7 1.7L15.4 6l1.6 5.2 1.7 1.7a1 1 0 0 1-.7 1.7H13v5.4l-1 1.6-1-1.6v-5.4H6a1 1 0 0 1-.7-1.7L7 11.200 8.600 6 7.300 4.700A1 1 0 0 1 8 3z" transform="rotate(35 12 12)"/></svg>';
+const PIN='📌';
 function isPin(b){return !!(S.bk[b.id]&&S.bk[b.id].pin)}
 function bookSheet(b){
   if(!b)return;const s=S.bk[b.id]||{};const p=planInfo(b);
