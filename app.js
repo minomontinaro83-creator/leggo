@@ -1,5 +1,5 @@
 "use strict";
-const VERSION='1.6';
+const VERSION='1.7';
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -655,7 +655,7 @@ const buzz=ms=>{try{navigator.vibrate&&navigator.vibrate(ms||14)}catch(e){}};
 function sentPieces(raw){
   const out=[],re=/[^.!?;:]+[.!?;:]?\s*/g;let m;
   while((m=re.exec(raw))){let t=m[0],base=m.index;const lead=t.length-t.trimStart().length;t=t.trim();let off=base+lead;
-    while(t.length>230){let k=t.lastIndexOf(',',220);if(k<80)k=t.lastIndexOf(' ',220);if(k<1)k=220;const piece=t.slice(0,k+1);out.push({off,text:piece});const rest=t.slice(k+1);const l2=rest.length-rest.trimStart().length;off+=k+1+l2;t=rest.trim()}
+    while(t.length>150){let k=t.lastIndexOf(',',140);if(k<60)k=t.lastIndexOf(' ',140);if(k<1)k=140;const piece=t.slice(0,k+1);out.push({off,text:piece});const rest=t.slice(k+1);const l2=rest.length-rest.trimStart().length;off+=k+1+l2;t=rest.trim()}
     if(t)out.push({off,text:t})}
   return out
 }
@@ -664,7 +664,7 @@ function buildQueue(fromBlock,big){
   const pieces=[];kids.forEach(k=>sentPieces(k.textContent).forEach(p=>pieces.push({b:+k.dataset.i,off:p.off,text:p.text})));
   if(!big)return pieces.map(p=>({parts:[p],text:p.text}));
   const q=[];let cur=null;
-  pieces.forEach(p=>{if(cur&&cur.text.length+p.text.length>1100){q.push(cur);cur=null}
+  pieces.forEach(p=>{if(cur&&cur.text.length+p.text.length>600){q.push(cur);cur=null}
     if(!cur)cur={parts:[],text:''};
     if(cur.parts.length){const same=cur.parts[cur.parts.length-1].b===p.b;cur.text+=same?' ':'\n'}
     cur.parts.push({...p,cum:cur.text.length});cur.text+=p.text});
@@ -689,6 +689,8 @@ function hlWord(b,off,scroll){
     if(S.set.mode==='pages'){const t2=$('#rtext');const x=q.left-t2.getBoundingClientRect().left+t2.scrollLeft;const pg=Math.floor(x/sc.clientWidth);if(pg!==R.page){showPage(pg);requestAnimationFrame(draw)}}
     else if(q.bottom>sr.bottom-90||q.top<sr.top+30){sc.scrollBy({top:q.top-sr.top-sc.clientHeight*.3,behavior:'smooth'});setTimeout(draw,120);setTimeout(draw,450)}}
 }
+function wcum(ch){if(ch.cum)return ch.cum;const t=ch.text,c=new Float32Array(t.length);let a=0;for(let i=0;i<t.length;i++){const x=t[i];a+=1+(/[.!?]/.test(x)?10:/[;:]/.test(x)?6:x===','?3:x==='\n'?12:0);c[i]=a}return ch.cum=c}
+function posAtW(ch,w){const c=wcum(ch);let lo=0,hi=c.length-1;while(lo<hi){const m=(lo+hi)>>1;if(c[m]>=w)hi=m;else lo=m+1}return lo}
 function posToBlock(ch,pc){let part=ch.parts[0];for(const p of ch.parts){if((p.cum||0)<=pc)part=p;else break}return {b:part.b,off:part.off+Math.max(0,pc-(part.cum||0))}}
 function listenMark(ch,pc,scroll){
   const x=posToBlock(ch,pc);hlWord(x.b,x.off,scroll!==false);
@@ -737,6 +739,7 @@ function startListen(){
   if(eng==='device'&&!('speechSynthesis' in window)){toast('Sintesi vocale non disponibile');return false}
   stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,eng==='openai');
   if(!q.length){toast('Niente da leggere qui');return false}
+  if(eng==='device'&&!startListen.warned){startListen.warned=true;toast('Voce del telefono: a schermo spento si ferma. Per ascoltare a schermo spento usa la voce Naturale (OpenAI) dall’ingranaggio.')}
   LS={on:true,q,i:0,paused:false,gen:(LS.gen||0)+1};pre={};mediaInit();mediaMeta();keepAlive(eng==='device');mediaState();lpUpdate();speechNext();return true
 }
 function listen(){if(LS.on)return listenSheet();startListen()}
@@ -748,7 +751,7 @@ function oaiFetch(i){
   if(!/^tts-1/.test(S.tts.omodel))body.instructions='Leggi in italiano con voce naturale, calda e pacata. Pronuncia correttamente i nomi propri.';
   return pre[i]=fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{'Authorization':'Bearer '+S.tts.okey,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async r=>{if(!r.ok){let m='Errore '+r.status;try{m=(await r.json()).error.message}catch(e){}throw new Error(m)}return URL.createObjectURL(await r.blob())})
 }
-function trackAudio(ch,gen){clearInterval(estT);estT=setInterval(()=>{if(!LS.on||gen!==LS.gen||!AU||!AU.duration||isNaN(AU.duration))return;listenMark(ch,Math.floor(AU.currentTime/AU.duration*ch.text.length),!document.hidden)},150)}
+function trackAudio(ch,gen){clearInterval(estT);estT=setInterval(()=>{if(!LS.on||gen!==LS.gen||!AU||!AU.duration||isNaN(AU.duration))return;{const c=wcum(ch);listenMark(ch,posAtW(ch,AU.currentTime/AU.duration*c[c.length-1]),!document.hidden)}},150)}
 async function nextChapterListen(){
   if(R.c>=R.b.chapters.length-1){stopListen();toast('Fine del libro');return}
   savePos();drawChapter(R.c+1);$('#rscroll').scrollTop=0;showPage(0);
@@ -768,14 +771,15 @@ async function speechNext(){
     return
   }
   const u=new SpeechSynthesisUtterance(ch.text);u.lang='it-IT';u.rate=S.set.rate;const v=pickVoice();if(v)u.voice=v;
-  gotBoundary=false;
+  gotBoundary=false;let t0=0;const c=wcum(ch),tot=c[c.length-1];
+  u.onstart=()=>{if(gen!==LS.gen)return;t0=Date.now();clearInterval(estT);
+    estT=setInterval(()=>{if(gen!==LS.gen){clearInterval(estT);return}if(gotBoundary||LS.paused)return;const el=(Date.now()-t0)/1000;listenMark(ch,posAtW(ch,el*(S.tts.wps||17)*S.set.rate),!document.hidden)},120)};
   u.onboundary=e=>{if(gen!==LS.gen)return;gotBoundary=true;clearInterval(estT);listenMark(ch,e.charIndex,!document.hidden)};
-  u.onend=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){clearInterval(estT);LS.i++;speechNext()}};
+  u.onend=()=>{
+    if(gen===LS.gen&&t0&&!gotBoundary){const el=(Date.now()-t0)/1000;if(el>.6){const m=tot/el/S.set.rate;S.tts.wps=Math.max(8,Math.min(45,(S.tts.wps||17)*.5+m*.5));save()}}
+    if(LS.on&&gen===LS.gen&&!LS.paused){clearInterval(estT);LS.i++;speechNext()}};
   u.onerror=()=>{};
-  speechSynthesis.speak(u);
-  /* se la voce non invia i confini di parola, stima il punto di lettura */
-  const t0=Date.now();clearInterval(estT);
-  estT=setInterval(()=>{if(gen!==LS.gen||gotBoundary||LS.paused){if(gen!==LS.gen||gotBoundary)clearInterval(estT);return}const el=(Date.now()-t0)/1000;if(el<.8)return;listenMark(ch,Math.min(ch.text.length-1,Math.floor(el*15*S.set.rate)),!document.hidden)},200)
+  speechSynthesis.speak(u)
 }
 function listenSheet(){
   const T=S.tts,dv=itVoices();
