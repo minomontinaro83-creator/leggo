@@ -157,3 +157,15 @@ input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--
 
 #reader.pinbar.immersive .rbot{transform:none;opacity:1;pointer-events:auto;position:static}
 .lesson-end{margin:18px 0;padding:8px 12px;border-top:2px solid var(--acc);border-bottom:2px solid var(--acc);color:var(--acc);text-align:center;font:600 13px system-ui,sans-serif;text-indent:0}
+
+#rtext{position:relative;z-index:1}
+#hlw{position:absolute;left:0;top:0;width:0;height:0;z-index:0;pointer-events:none}
+#hlw i{position:absolute;background:rgba(255,214,10,.78);border-radius:999px}
+::highlight(tts){color:#111}
+#lp{display:flex;align-items:center;justify-content:space-between;gap:2px;padding:4px max(10px,env(safe-area-inset-left,0));background:var(--bg);border-top:1px solid var(--line);z-index:4}
+#lp[hidden]{display:none}
+#lp button{min-width:40px;height:40px;border-radius:20px;color:var(--ink);font-size:16px;display:inline-flex;align-items:center;justify-content:center}
+#lp #lp-pp{background:var(--acc);color:#111;min-width:48px;height:44px;border-radius:22px}
+#lp .sp{display:inline-flex;align-items:center;gap:0;background:var(--card,rgba(127,127,127,.15));border-radius:20px}
+#lp .sp b{min-width:44px;text-align:center;font-size:13px;font-variant-numeric:tabular-nums}
+#reader.immersive #lp{position:relative}

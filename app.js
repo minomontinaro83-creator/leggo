@@ -1,5 +1,5 @@
 "use strict";
-const VERSION='1.4';
+const VERSION='1.5';
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -649,63 +649,154 @@ $('#r-ai').onclick=()=>aiPanel(null);
 
 /* ================= ascolto ================= */
 const OVOICES=['coral','nova','shimmer','sage','ballad','verse','alloy','ash','echo','fable','onyx'];
-let LS={on:false,q:[],i:0,paused:false,gen:0},AU=null,pre={};
-function chunks(text){const out=[];text.split(/\n+/).forEach(par=>{(par.match(/[^.!?;:]+[.!?;:]?\s*/g)||[par]).forEach(s=>{s=s.trim();if(!s)return;while(s.length>230){let k=s.lastIndexOf(',',220);if(k<80)k=s.lastIndexOf(' ',220);out.push(s.slice(0,k+1));s=s.slice(k+1).trim()}out.push(s)})});return out}
-function bigChunks(text){const out=[];let cur='';text.split(/\n+/).forEach(par=>{par=par.trim();if(!par)return;if(cur&&(cur.length+par.length)>1100){out.push(cur);cur=''}
-  if(par.length>1100){(par.match(/[^.!?;:]+[.!?;:]?\s*/g)||[par]).forEach(sn=>{if(cur.length+sn.length>1100){if(cur)out.push(cur);cur=''}cur+=sn})}else cur+=(cur?'\n':'')+par});if(cur)out.push(cur);return out}
-function readText(){const e=anchorEl();let i=e?+e.dataset.i:0;const kids=[...document.querySelectorAll('#rtext > [data-i]')];return kids.slice(i).map(k=>k.textContent.trim()).filter(Boolean).join('\n')}
+let LS={on:false,q:[],i:0,paused:false,gen:0},AU=null,pre={},KA=null,estT=null,hlT=null,gotBoundary=false;
+const buzz=ms=>{try{navigator.vibrate&&navigator.vibrate(ms||14)}catch(e){}};
+/* frasi con la posizione nel blocco */
+function sentPieces(raw){
+  const out=[],re=/[^.!?;:]+[.!?;:]?\s*/g;let m;
+  while((m=re.exec(raw))){let t=m[0],base=m.index;const lead=t.length-t.trimStart().length;t=t.trim();let off=base+lead;
+    while(t.length>230){let k=t.lastIndexOf(',',220);if(k<80)k=t.lastIndexOf(' ',220);if(k<1)k=220;const piece=t.slice(0,k+1);out.push({off,text:piece});const rest=t.slice(k+1);const l2=rest.length-rest.trimStart().length;off+=k+1+l2;t=rest.trim()}
+    if(t)out.push({off,text:t})}
+  return out
+}
+function buildQueue(fromBlock,big){
+  const kids=[...document.querySelectorAll('#rtext > [data-i]')].filter(k=>+k.dataset.i>=fromBlock);
+  const pieces=[];kids.forEach(k=>sentPieces(k.textContent).forEach(p=>pieces.push({b:+k.dataset.i,off:p.off,text:p.text})));
+  if(!big)return pieces.map(p=>({parts:[p],text:p.text}));
+  const q=[];let cur=null;
+  pieces.forEach(p=>{if(cur&&cur.text.length+p.text.length>1100){q.push(cur);cur=null}
+    if(!cur)cur={parts:[],text:''};
+    if(cur.parts.length){const same=cur.parts[cur.parts.length-1].b===p.b;cur.text+=same?' ':'\n'}
+    cur.parts.push({...p,cum:cur.text.length});cur.text+=p.text});
+  if(cur)q.push(cur);return q
+}
 function itVoices(){try{return speechSynthesis.getVoices().filter(v=>/^it/i.test(v.lang)).map(v=>({v,sc:(/natural|neural|online|network/i.test(v.name+v.voiceURI)?2:0)+(/google/i.test(v.name)?1:0)+(v.localService?0:1)})).sort((a,b)=>b.sc-a.sc).map(x=>x.v)}catch(e){return[]}}
 function pickVoice(){const l=itVoices();return l.find(v=>v.voiceURI===S.tts.voice)||l[0]||null}
-function startListen(){
-  const eng=S.tts.engine,text=readText();
-  if(eng==='openai'&&!S.tts.okey){toast('Inserisci la chiave OpenAI');return false}
-  if(eng==='device'&&!('speechSynthesis' in window)){toast('Sintesi vocale non disponibile');return false}
-  stopAudio();LS={on:true,q:eng==='openai'?bigChunks(text):chunks(text),i:0,paused:false,gen:(LS.gen||0)+1};pre={};speechNext();return true
+/* parola evidenziata */
+function textPos(el,off){const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let n,pos=0,last=null;while((n=w.nextNode())){const l=n.nodeValue.length;if(off<=pos+l)return [n,off-pos];pos+=l;last=n}return last?[last,last.nodeValue.length]:null}
+function clearHl(){const h=$('#hlw');if(h)h.innerHTML='';try{CSS.highlights&&CSS.highlights.delete('tts')}catch(e){}}
+function hlWord(b,off,scroll){
+  const el=document.querySelector('#rtext > [data-i="'+b+'"]');if(!el)return;
+  const t=el.textContent;if(off>=t.length)off=Math.max(0,t.length-1);
+  let s0=off,e0=off;while(s0>0&&!/\s/.test(t[s0-1]))s0--;while(e0<t.length&&!/\s/.test(t[e0]))e0++;
+  if(e0<=s0)return;const p1=textPos(el,s0),p2=textPos(el,e0);if(!p1||!p2)return;
+  const r=document.createRange();r.setStart(p1[0],p1[1]);r.setEnd(p2[0],p2[1]);
+  const sc=$('#rscroll');let h=$('#hlw');if(!h){h=document.createElement('div');h.id='hlw';sc.appendChild(h)}
+  const draw=()=>{const sr=sc.getBoundingClientRect();h.innerHTML='';[...r.getClientRects()].forEach(q=>{if(q.width<2)return;const d=document.createElement('i');d.style.cssText='left:'+(q.left-sr.left+sc.scrollLeft-3)+'px;top:'+(q.top-sr.top+sc.scrollTop-1)+'px;width:'+(q.width+6)+'px;height:'+(q.height+2)+'px';h.appendChild(d)})};
+  draw();
+  try{if(window.Highlight&&CSS.highlights)CSS.highlights.set('tts',new Highlight(r))}catch(e){}
+  if(scroll){const sr=sc.getBoundingClientRect(),q=r.getBoundingClientRect();
+    if(S.set.mode==='pages'){const t2=$('#rtext');const x=q.left-t2.getBoundingClientRect().left+t2.scrollLeft;const pg=Math.floor(x/sc.clientWidth);if(pg!==R.page){showPage(pg);requestAnimationFrame(draw)}}
+    else if(q.bottom>sr.bottom-90||q.top<sr.top+30){sc.scrollBy({top:q.top-sr.top-sc.clientHeight*.3,behavior:'smooth'});setTimeout(draw,120);setTimeout(draw,450)}}
 }
-function listen(){if(LS.on)return listenSheet();if(startListen())listenSheet()}
-function stopAudio(){try{speechSynthesis.cancel()}catch(e){}if(AU){try{AU.pause()}catch(e){}AU.onended=null;AU.onerror=null}Object.values(pre).forEach(p=>p.then(u=>URL.revokeObjectURL(u)).catch(()=>{}));pre={}}
+function posToBlock(ch,pc){let part=ch.parts[0];for(const p of ch.parts){if((p.cum||0)<=pc)part=p;else break}return {b:part.b,off:part.off+Math.max(0,pc-(part.cum||0))}}
+function listenMark(ch,pc,scroll){
+  const x=posToBlock(ch,pc);hlWord(x.b,x.off,scroll!==false);
+  if(R.b&&x.b!=null){const s=BK(R.id);s.pos={c:R.c,b:x.b,off:20};const w=R.b.chapters[R.c].w0+(R.bw[x.b]||0);commitProgress(w);S.sess={view:curView,rd:true,id:R.id};save()}
+}
+/* sessione multimediale (schermata di blocco, notifiche, Always On Display) */
+function silentWav(){const n=8000,b=new Uint8Array(44+n),dv=new DataView(b.buffer);const w=(o,s)=>[...s].forEach((c,i)=>b[o+i]=c.charCodeAt(0));w(0,'RIFF');dv.setUint32(4,36+n,true);w(8,'WAVEfmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,8000,true);dv.setUint32(28,8000,true);dv.setUint16(32,1,true);dv.setUint16(34,8,true);w(36,'data');dv.setUint32(40,n,true);b.fill(128,44);return new Blob([b],{type:'audio/wav'})}
+function mediaMeta(){
+  if(!('mediaSession' in navigator)||!R.b)return;
+  try{navigator.mediaSession.metadata=new MediaMetadata({title:R.b.title,artist:R.b.author||'Ebook 1000',album:R.b.chapters[R.c].t,artwork:[{src:R.b.cover||new URL('icon-512.png',location.href).href,sizes:'512x512'}]})}catch(e){}
+}
+function mediaState(){if('mediaSession' in navigator)try{navigator.mediaSession.playbackState=!LS.on?'none':LS.paused?'paused':'playing'}catch(e){}}
+function mediaInit(){
+  if(!('mediaSession' in navigator)||mediaInit.done)return;mediaInit.done=true;
+  const h=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
+  h('play',()=>{if(LS.on)setPaused(false)});h('pause',()=>{if(LS.on)setPaused(true)});h('stop',()=>stopListen());
+  h('previoustrack',()=>skipL(-1));h('nexttrack',()=>skipL(1));h('seekbackward',()=>skipL(-3));h('seekforward',()=>skipL(3))
+}
+function keepAlive(on){
+  try{if(on){if(!KA){KA=new Audio(URL.createObjectURL(silentWav()));KA.loop=true;KA.volume=.02}KA.play().catch(()=>{})}else if(KA)KA.pause()}catch(e){}
+}
+/* controlli */
+function lpUpdate(){
+  const p=$('#lp');if(!p)return;p.hidden=!LS.on;if(!LS.on)return;
+  $('#lp-pp').textContent=LS.paused?'▶':'❚❚';$('#lp-r').textContent=S.set.rate.toFixed(1)+'×';
+  const li=document.getElementById('l-i');if(li)li.textContent=LS.i+1
+}
+function respeak(){LS.gen++;try{speechSynthesis.cancel()}catch(e){}if(AU){AU.onended=null;try{AU.pause()}catch(e){}}clearInterval(estT);speechNext()}
+function setPaused(p){
+  if(!LS.on)return;LS.paused=p;
+  if(p){try{speechSynthesis.cancel()}catch(e){}LS.gen++;clearInterval(estT);if(AU)AU.pause();keepAlive(false)}
+  else{keepAlive(S.tts.engine==='device');if(S.tts.engine==='openai'&&AU&&AU.src&&AU.currentTime>0&&!AU.ended){const g=LS.gen;AU.play();AU.onended=()=>{if(LS.on&&g===LS.gen&&!LS.paused){LS.i++;speechNext()}};trackAudio(LS.q[LS.i],g)}else respeak()}
+  mediaState();lpUpdate();const b=document.getElementById('l-pp');if(b)b.textContent=p?'Riprendi':'Pausa'
+}
+function setRate(r){S.set.rate=Math.max(.6,Math.min(2,Math.round(r*10)/10));save();if(AU)AU.playbackRate=S.set.rate;lpUpdate();const rr=document.getElementById('l-r');if(rr)rr.value=S.set.rate;if(LS.on&&!LS.paused&&S.tts.engine==='device')respeak()}
+function skipL(d){if(!LS.on)return;LS.i=Math.max(0,Math.min(LS.q.length-1,LS.i+d));LS.paused=false;keepAlive(S.tts.engine==='device');respeak();mediaState()}
+$('#lp-pp').onclick=()=>{buzz();setPaused(!LS.paused)};
+$('#lp-stop').onclick=()=>{buzz(25);stopListen()};
+$('#lp-prev').onclick=()=>{buzz();skipL(-1)};$('#lp-next').onclick=()=>{buzz();skipL(1)};
+$('#lp-m').onclick=()=>{buzz();setRate(S.set.rate-.1)};$('#lp-p').onclick=()=>{buzz();setRate(S.set.rate+.1)};
+$('#lp-set').onclick=()=>{buzz();listenSheet()};
+/* avvio e coda */
+function startListen(){
+  const eng=S.tts.engine;
+  if(eng==='openai'&&!S.tts.okey){toast('Inserisci la chiave OpenAI');listenSheet();return false}
+  if(eng==='device'&&!('speechSynthesis' in window)){toast('Sintesi vocale non disponibile');return false}
+  stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,eng==='openai');
+  if(!q.length){toast('Niente da leggere qui');return false}
+  LS={on:true,q,i:0,paused:false,gen:(LS.gen||0)+1};pre={};mediaInit();mediaMeta();keepAlive(eng==='device');mediaState();lpUpdate();speechNext();return true
+}
+function listen(){if(LS.on)return listenSheet();startListen()}
+function stopAudio(){try{speechSynthesis.cancel()}catch(e){}clearInterval(estT);if(AU){try{AU.pause()}catch(e){}AU.onended=null;AU.onerror=null}Object.values(pre).forEach(p=>p.then(u=>URL.revokeObjectURL(u)).catch(()=>{}));pre={}}
+function stopListen(){LS.on=false;LS.gen++;stopAudio();keepAlive(false);clearHl();mediaState();lpUpdate()}
 function oaiFetch(i){
   if(pre[i])return pre[i];
-  const body={model:S.tts.omodel,voice:S.tts.ovoice,input:LS.q[i],response_format:'mp3'};
+  const body={model:S.tts.omodel,voice:S.tts.ovoice,input:LS.q[i].text,response_format:'mp3'};
   if(!/^tts-1/.test(S.tts.omodel))body.instructions='Leggi in italiano con voce naturale, calda e pacata. Pronuncia correttamente i nomi propri.';
   return pre[i]=fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{'Authorization':'Bearer '+S.tts.okey,'Content-Type':'application/json'},body:JSON.stringify(body)}).then(async r=>{if(!r.ok){let m='Errore '+r.status;try{m=(await r.json()).error.message}catch(e){}throw new Error(m)}return URL.createObjectURL(await r.blob())})
 }
+function trackAudio(ch,gen){clearInterval(estT);estT=setInterval(()=>{if(!LS.on||gen!==LS.gen||!AU||!AU.duration||isNaN(AU.duration))return;listenMark(ch,Math.floor(AU.currentTime/AU.duration*ch.text.length),!document.hidden)},150)}
+async function nextChapterListen(){
+  if(R.c>=R.b.chapters.length-1){stopListen();toast('Fine del libro');return}
+  savePos();drawChapter(R.c+1);$('#rscroll').scrollTop=0;showPage(0);
+  const q=buildQueue(0,S.tts.engine==='openai');if(!q.length){return nextChapterListen()}
+  LS.q=q;LS.i=0;pre={};LS.gen++;mediaMeta();speechNext()
+}
 async function speechNext(){
-  if(!LS.on)return;if(LS.i>=LS.q.length){stopListen();return}
-  const li=document.getElementById('l-i');if(li)li.textContent=(LS.i+1);
-  const gen=LS.gen,i=LS.i;
+  if(!LS.on)return;if(LS.i>=LS.q.length){await nextChapterListen();return}
+  lpUpdate();const gen=LS.gen,i=LS.i,ch=LS.q[i];listenMark(ch,0,!document.hidden);
   if(S.tts.engine==='openai'){
     try{
       const url=await oaiFetch(i);if(!LS.on||gen!==LS.gen||LS.paused)return;
       if(i+1<LS.q.length)oaiFetch(i+1).catch(()=>{});
-      if(!AU)AU=new Audio();AU.onended=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){LS.i++;speechNext()}};AU.onerror=()=>{toast('Errore audio')};
-      AU.src=url;AU.playbackRate=S.set.rate;await AU.play()
-    }catch(e){if(LS.on&&gen===LS.gen){toast(e.message||'Errore voce OpenAI');LS.paused=true;const b=document.getElementById('l-pp');if(b)b.textContent='Riprendi'}}
+      if(!AU)AU=new Audio();AU.onended=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){clearInterval(estT);LS.i++;speechNext()}};AU.onerror=()=>{toast('Errore audio')};
+      AU.src=url;AU.playbackRate=S.set.rate;await AU.play();trackAudio(ch,gen)
+    }catch(e){if(LS.on&&gen===LS.gen){toast(e.message||'Errore voce OpenAI');LS.paused=true;mediaState();lpUpdate()}}
     return
   }
-  const u=new SpeechSynthesisUtterance(LS.q[i]);u.lang='it-IT';u.rate=S.set.rate;const v=pickVoice();if(v)u.voice=v;
-  u.onend=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){LS.i++;speechNext()}};u.onerror=()=>{};speechSynthesis.speak(u)
+  const u=new SpeechSynthesisUtterance(ch.text);u.lang='it-IT';u.rate=S.set.rate;const v=pickVoice();if(v)u.voice=v;
+  gotBoundary=false;
+  u.onboundary=e=>{if(gen!==LS.gen)return;gotBoundary=true;clearInterval(estT);listenMark(ch,e.charIndex,!document.hidden)};
+  u.onend=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){clearInterval(estT);LS.i++;speechNext()}};
+  u.onerror=()=>{};
+  speechSynthesis.speak(u);
+  /* se la voce non invia i confini di parola, stima il punto di lettura */
+  const t0=Date.now();clearInterval(estT);
+  estT=setInterval(()=>{if(gen!==LS.gen||gotBoundary||LS.paused){if(gen!==LS.gen||gotBoundary)clearInterval(estT);return}const el=(Date.now()-t0)/1000;if(el<.8)return;listenMark(ch,Math.min(ch.text.length-1,Math.floor(el*15*S.set.rate)),!document.hidden)},200)
 }
-function stopListen(){LS.on=false;stopAudio()}
 function listenSheet(){
   const T=S.tts,dv=itVoices();
-  sheet('<div class="hd"><h3>Ascolto</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">Parte <span id="l-i" class="tab">'+(LS.i+1)+'</span> di '+LS.q.length+'</div><div class="row"><button class="btn grow" id="l-pp">'+(LS.paused?'Riprendi':'Pausa')+'</button><button class="btn sec" id="l-stop">Ferma</button></div>'
-   +'<div class="field"><label for="l-r">Velocità</label><input id="l-r" type="range" min="0.6" max="1.6" step="0.1" value="'+S.set.rate+'"></div>'
-   +'<div class="field"><label>Voce</label><div class="seg" id="l-eng"><button data-v="device"'+(T.engine==='device'?' class="on"':'')+'>Del telefono</button><button data-v="openai"'+(T.engine==='openai'?' class="on"':'')+'>Naturale (OpenAI)</button></div></div>'
+  sheet('<div class="hd"><h3>Ascolto</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+(LS.on?'Parte <span id="l-i" class="tab">'+(LS.i+1)+'</span> di '+LS.q.length+'. ':'')+'I controlli restano in basso mentre ascolti e sulla schermata di blocco.</div>'
+   +'<div class="field"><label for="l-r">Velocità</label><input id="l-r" type="range" min="0.6" max="2" step="0.1" value="'+S.set.rate+'"></div>'
+   +'<div class="field"><label>Voce</label><div class="seg" id="l-eng"><button data-v="device"'+(T.engine==='device'?' class="on"':'')+'>Del telefono</button><button data-v="openai"'+(T.engine==='openai'?' class="on"':'')+'>Naturale (OpenAI)</button></div><div class="small mute">A schermo spento la voce OpenAI è la più affidabile. Quella del telefono può fermarsi quando lo schermo si spegne.</div></div>'
    +'<div id="l-dev"'+(T.engine==='device'?'':' hidden')+' class="stack"><div class="field"><label for="l-dv">Voce italiana del telefono</label><select id="l-dv" class="input"><option value="">Automatica (la migliore)</option>'+dv.map(v=>'<option value="'+esc(v.voiceURI)+'"'+(v.voiceURI===T.voice?' selected':'')+'>'+esc(v.name)+(v.localService?'':' (rete)')+'</option>').join('')+'</select></div></div>'
-   +'<div id="l-oai"'+(T.engine==='openai'?'':' hidden')+' class="stack"><div class="field"><label for="l-ok">Chiave API OpenAI</label><input class="input" id="l-ok" type="password" autocomplete="off" placeholder="sk-..." value="'+esc(T.okey)+'"></div><div class="field"><label for="l-ov">Voce</label><select id="l-ov" class="input">'+OVOICES.map(v=>'<option'+(v===T.ovoice?' selected':'')+'>'+v+'</option>').join('')+'</select></div><div class="field"><label for="l-om">Modello</label><input class="input" id="l-om" type="text" value="'+esc(T.omodel)+'"></div></div>',box=>{
-    const restart=()=>{const frac=LS.q.length?LS.i/LS.q.length:0;const was=LS.on;stopAudio();if(!was)return;LS.on=false;const text=readText();const q=T.engine==='openai'?bigChunks(text):chunks(text);LS={on:true,q,i:Math.min(Math.max(0,q.length-1),Math.floor(frac*q.length)),paused:false,gen:LS.gen+1};pre={};speechNext()};
-    $('#l-pp',box).onclick=e=>{if(LS.paused){LS.paused=false;e.target.textContent='Pausa';if(T.engine==='openai'&&AU&&AU.src&&!AU.ended&&AU.currentTime>0){AU.play()}else{speechSynthesis.cancel();speechNext()}}else{LS.paused=true;e.target.textContent='Riprendi';if(T.engine==='openai'&&AU)AU.pause();else speechSynthesis.cancel()}};
-    $('#l-stop',box).onclick=()=>{stopListen();closeSheet()};
-    $('#l-r',box).onchange=e=>{S.set.rate=+e.target.value;save();if(AU)AU.playbackRate=S.set.rate;if(T.engine==='device'&&LS.on&&!LS.paused){speechSynthesis.cancel();speechNext()}};
-    box.querySelectorAll('#l-eng button').forEach(b=>b.onclick=()=>{if(T.engine===b.dataset.v)return;T.engine=b.dataset.v;save();box.querySelectorAll('#l-eng button').forEach(x=>x.classList.toggle('on',x===b));$('#l-dev',box).hidden=T.engine!=='device';$('#l-oai',box).hidden=T.engine!=='openai';if(T.engine==='openai'&&!T.okey){stopAudio();LS.on=false;toast('Inserisci la chiave OpenAI');return}restart()});
-    $('#l-dv',box).onchange=e=>{T.voice=e.target.value;save();if(LS.on&&T.engine==='device'){speechSynthesis.cancel();speechNext()}};
-    $('#l-ok',box).onchange=e=>{T.okey=e.target.value.trim();save();if(T.okey&&T.engine==='openai'&&!LS.on){startListen()}};
+   +'<div id="l-oai"'+(T.engine==='openai'?'':' hidden')+' class="stack"><div class="field"><label for="l-ok">Chiave API OpenAI</label><input class="input" id="l-ok" type="password" autocomplete="off" placeholder="sk-..." value="'+esc(T.okey)+'"></div><div class="field"><label for="l-ov">Voce</label><select id="l-ov" class="input">'+OVOICES.map(v=>'<option'+(v===T.ovoice?' selected':'')+'>'+v+'</option>').join('')+'</select></div><div class="field"><label for="l-om">Modello</label><input class="input" id="l-om" type="text" value="'+esc(T.omodel)+'"></div></div>'
+   +'<div class="row">'+(LS.on?'':'<button class="btn grow" id="l-go">Avvia l’ascolto</button>')+'</div>',box=>{
+    const restart=()=>{if(!LS.on)return;const was=LS.i/Math.max(1,LS.q.length);stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,T.engine==='openai');LS={on:true,q,i:0,paused:false,gen:LS.gen+1};pre={};keepAlive(T.engine==='device');lpUpdate();speechNext()};
+    $('#l-r',box).onchange=e=>setRate(+e.target.value);
+    box.querySelectorAll('#l-eng button').forEach(b=>b.onclick=()=>{if(T.engine===b.dataset.v)return;T.engine=b.dataset.v;save();box.querySelectorAll('#l-eng button').forEach(x=>x.classList.toggle('on',x===b));$('#l-dev',box).hidden=T.engine!=='device';$('#l-oai',box).hidden=T.engine!=='openai';if(T.engine==='openai'&&!T.okey){if(LS.on)stopListen();toast('Inserisci la chiave OpenAI');return}restart()});
+    $('#l-dv',box).onchange=e=>{T.voice=e.target.value;save();if(LS.on&&T.engine==='device')respeak()};
+    $('#l-ok',box).onchange=e=>{T.okey=e.target.value.trim();save()};
     $('#l-ov',box).onchange=e=>{T.ovoice=e.target.value;save();if(T.engine==='openai'&&LS.on)restart()};
-    $('#l-om',box).onchange=e=>{T.omodel=e.target.value.trim()||'gpt-4o-mini-tts';save()}})
+    $('#l-om',box).onchange=e=>{T.omodel=e.target.value.trim()||'gpt-4o-mini-tts';save()};
+    const go2=$('#l-go',box);if(go2)go2.onclick=()=>closeSheet(()=>startListen())})
 }
-$('#r-listen').onclick=listen;
+$('#r-listen').onclick=()=>{buzz(10);listen()};
 try{speechSynthesis.onvoiceschanged=()=>{}}catch(e){}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&LS.on&&R.b){const c=LS.q[LS.i];if(c)listenMark(c,0,true)}});
 
 function todayBanner(){
   const pl=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p&&!x.p.ok&&!x.p.late&&!x.p.paused&&!x.p.wait).sort((x,y)=>(y.b.id===S.last)-(x.b.id===S.last))[0];
