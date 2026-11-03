@@ -1,5 +1,5 @@
 "use strict";
-const VERSION='1.7';
+const VERSION='1.8';
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -9,7 +9,7 @@ const FONTS={
 };
 const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1,pin:false,bar:'day'};
 let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
-  tts:{engine:'device',voice:'',okey:'',ovoice:'coral',omodel:'gpt-4o-mini-tts'}};
+  tts:{engine:'device',voice:'',okey:'',ovoice:'coral',omodel:'gpt-4o-mini-tts',gkey:'',gvoice:'Kore',gmodel:'gemini-2.5-flash-preview-tts',wps:17}};
 try{const r=localStorage.getItem(SKEY);if(r){const o=JSON.parse(r);S={...S,...o,set:{...DEF,...(o.set||{})},tts:{...S.tts,...(o.tts||{})}}}}catch(e){}
 let st=null;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}},250)}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),2400)}
@@ -290,7 +290,7 @@ function openLib(kind){
 
 /* ================= copia di sicurezza ================= */
 function dataObj(withKeys){
-  const copy=JSON.parse(JSON.stringify({...S,sess:null}));if(!withKeys){copy.key='';copy.tts.okey=''}
+  const copy=JSON.parse(JSON.stringify({...S,sess:null}));if(!withKeys){copy.key='';copy.tts.okey='';copy.tts.gkey=''}
   return {app:'leggo',v:1,date:todayISO(),S:copy,books:LIB.map(b=>({id:b.id,title:b.title,author:b.author,ext:b.ext}))}
 }
 function exportData(){try{S.lastBackup=todayISO();save();download(new Blob([JSON.stringify(dataObj(true))],{type:'application/json'}),'ebook1000-dati-'+todayISO()+'.json');toast('Copia scaricata');rAltro()}catch(e){toast('Download non disponibile')}}
@@ -303,11 +303,11 @@ async function exportZip(){
 }
 function mergeData(o){
   if(!o||o.app!=='leggo'||!o.S)throw new Error('File non valido');
-  const key=S.key,okey=S.tts.okey,keep=S.bk;
+  const key=S.key,okey=S.tts.okey,gkey=S.tts.gkey,keep=S.bk;
   const bk={...keep};Object.keys(o.S.bk||{}).forEach(id=>{if(!keep[id]||(o.S.bk[id].opened||0)>=(keep[id].opened||0))bk[id]=o.S.bk[id]});
   S={...S,...o.S,bk,set:{...DEF,...(o.S.set||{})},tts:{...S.tts,...(o.S.tts||{})},known:{...S.known,...(o.S.known||{})},log:{...(o.S.log||{}),...S.log},sess:null};
   (o.books||[]).forEach(b=>{S.known[b.id]={title:b.title,author:b.author,ext:b.ext}});
-  if(!o.S.key)S.key=key;if(!S.tts.okey)S.tts.okey=okey;save();applyTheme()
+  if(!o.S.key)S.key=key;if(!S.tts.okey)S.tts.okey=okey;if(!S.tts.gkey)S.tts.gkey=gkey;save();applyTheme()
 }
 function importSheet(){
   sheet('<div class="hd"><h3>Importa copia</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">Scegli il file dati (.json) oppure la copia completa (.zip). I dati più recenti per ogni libro hanno la precedenza.</div><input type="file" id="fi" accept=".json,.zip,application/json,application/zip"><div class="field"><label for="ft">Oppure incolla il testo della copia</label><textarea id="ft"></textarea></div><button class="btn" id="fgo">Importa il testo</button>',box=>{
@@ -664,7 +664,7 @@ function buildQueue(fromBlock,big){
   const pieces=[];kids.forEach(k=>sentPieces(k.textContent).forEach(p=>pieces.push({b:+k.dataset.i,off:p.off,text:p.text})));
   if(!big)return pieces.map(p=>({parts:[p],text:p.text}));
   const q=[];let cur=null;
-  pieces.forEach(p=>{if(cur&&cur.text.length+p.text.length>600){q.push(cur);cur=null}
+  pieces.forEach(p=>{if(cur&&cur.text.length+p.text.length>(S.tts.engine==="gemini"?1200:600)){q.push(cur);cur=null}
     if(!cur)cur={parts:[],text:''};
     if(cur.parts.length){const same=cur.parts[cur.parts.length-1].b===p.b;cur.text+=same?' ':'\n'}
     cur.parts.push({...p,cum:cur.text.length});cur.text+=p.text});
@@ -722,7 +722,7 @@ function respeak(){LS.gen++;try{speechSynthesis.cancel()}catch(e){}if(AU){AU.one
 function setPaused(p){
   if(!LS.on)return;LS.paused=p;
   if(p){try{speechSynthesis.cancel()}catch(e){}LS.gen++;clearInterval(estT);if(AU)AU.pause();keepAlive(false)}
-  else{keepAlive(S.tts.engine==='device');if(S.tts.engine==='openai'&&AU&&AU.src&&AU.currentTime>0&&!AU.ended){const g=LS.gen;AU.play();AU.onended=()=>{if(LS.on&&g===LS.gen&&!LS.paused){LS.i++;speechNext()}};trackAudio(LS.q[LS.i],g)}else respeak()}
+  else{keepAlive(S.tts.engine==='device');if(S.tts.engine!=='device'&&AU&&AU.src&&AU.currentTime>0&&!AU.ended){const g=LS.gen;AU.play();AU.onended=()=>{if(LS.on&&g===LS.gen&&!LS.paused){LS.i++;speechNext()}};trackAudio(LS.q[LS.i],g)}else respeak()}
   mediaState();lpUpdate();const b=document.getElementById('l-pp');if(b)b.textContent=p?'Riprendi':'Pausa'
 }
 function setRate(r){S.set.rate=Math.max(.6,Math.min(2,Math.round(r*10)/10));save();if(AU)AU.playbackRate=S.set.rate;lpUpdate();const rr=document.getElementById('l-r');if(rr)rr.value=S.set.rate;if(LS.on&&!LS.paused&&S.tts.engine==='device')respeak()}
@@ -736,15 +736,38 @@ $('#lp-set').onclick=()=>{buzz();listenSheet()};
 function startListen(){
   const eng=S.tts.engine;
   if(eng==='openai'&&!S.tts.okey){toast('Inserisci la chiave OpenAI');listenSheet();return false}
+  if(eng==='gemini'&&!S.tts.gkey){toast('Inserisci la chiave Gemini');listenSheet();return false}
   if(eng==='device'&&!('speechSynthesis' in window)){toast('Sintesi vocale non disponibile');return false}
-  stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,eng==='openai');
+  stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,eng!=='device');
   if(!q.length){toast('Niente da leggere qui');return false}
-  if(eng==='device'&&!startListen.warned){startListen.warned=true;toast('Voce del telefono: a schermo spento si ferma. Per ascoltare a schermo spento usa la voce Naturale (OpenAI) dall’ingranaggio.')}
+  if(eng==='device'&&!startListen.warned){startListen.warned=true;toast('Voce del telefono: a schermo spento si ferma. Per ascoltare a schermo spento usa Gemini o OpenAI dall’ingranaggio.')}
   LS={on:true,q,i:0,paused:false,gen:(LS.gen||0)+1};pre={};mediaInit();mediaMeta();keepAlive(eng==='device');mediaState();lpUpdate();speechNext();return true
 }
 function listen(){if(LS.on)return listenSheet();startListen()}
 function stopAudio(){try{speechSynthesis.cancel()}catch(e){}clearInterval(estT);if(AU){try{AU.pause()}catch(e){}AU.onended=null;AU.onerror=null}Object.values(pre).forEach(p=>p.then(u=>URL.revokeObjectURL(u)).catch(()=>{}));pre={}}
 function stopListen(){LS.on=false;LS.gen++;stopAudio();keepAlive(false);clearHl();mediaState();lpUpdate()}
+function pcmToWav(b64,rate){
+  const bin=atob(b64),n=bin.length,u=new Uint8Array(44+n),dv=new DataView(u.buffer);const w=(o,t)=>[...t].forEach((c,k)=>u[o+k]=c.charCodeAt(0));
+  w(0,'RIFF');dv.setUint32(4,36+n,true);w(8,'WAVEfmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,rate,true);dv.setUint32(28,rate*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);w(36,'data');dv.setUint32(40,n,true);
+  for(let k=0;k<n;k++)u[44+k]=bin.charCodeAt(k);return new Blob([u],{type:'audio/wav'})
+}
+function cloudFetch(i){if(S.tts.engine==='gemini')return geminiFetch(i);return oaiFetch(i)}
+function geminiFetch(i){
+  if(pre[i])return pre[i];
+  const T=S.tts,body={contents:[{parts:[{text:LS.q[i].text}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:T.gvoice||'Kore'}}}}};
+  const go=async()=>{
+    for(let k=0;k<4;k++){
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(T.gmodel||'gemini-2.5-flash-preview-tts')+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':T.gkey},body:JSON.stringify(body)});
+      const j=await r.json().catch(()=>({}));
+      if(r.status===429&&k<3){await new Promise(x=>setTimeout(x,12000));continue}
+      if(!r.ok){let m=(j.error&&j.error.message)||('Errore '+r.status);if(r.status===429)m='Limite del piano gratuito Gemini raggiunto. Riprova più tardi.';throw new Error(m)}
+      const p=((((j.candidates||[])[0]||{}).content||{}).parts||[]).find(x=>x.inlineData&&x.inlineData.data);
+      if(!p)throw new Error('Gemini non ha restituito audio');
+      const mm=/rate=(\d+)/.exec(p.inlineData.mimeType||'');return URL.createObjectURL(pcmToWav(p.inlineData.data,mm?+mm[1]:24000))
+    }
+  };
+  return pre[i]=go()
+}
 function oaiFetch(i){
   if(pre[i])return pre[i];
   const body={model:S.tts.omodel,voice:S.tts.ovoice,input:LS.q[i].text,response_format:'mp3'};
@@ -755,19 +778,19 @@ function trackAudio(ch,gen){clearInterval(estT);estT=setInterval(()=>{if(!LS.on|
 async function nextChapterListen(){
   if(R.c>=R.b.chapters.length-1){stopListen();toast('Fine del libro');return}
   savePos();drawChapter(R.c+1);$('#rscroll').scrollTop=0;showPage(0);
-  const q=buildQueue(0,S.tts.engine==='openai');if(!q.length){return nextChapterListen()}
+  const q=buildQueue(0,S.tts.engine!=='device');if(!q.length){return nextChapterListen()}
   LS.q=q;LS.i=0;pre={};LS.gen++;mediaMeta();speechNext()
 }
 async function speechNext(){
   if(!LS.on)return;if(LS.i>=LS.q.length){await nextChapterListen();return}
   lpUpdate();const gen=LS.gen,i=LS.i,ch=LS.q[i];listenMark(ch,0,!document.hidden);
-  if(S.tts.engine==='openai'){
+  if(S.tts.engine!=='device'){
     try{
-      const url=await oaiFetch(i);if(!LS.on||gen!==LS.gen||LS.paused)return;
-      if(i+1<LS.q.length)oaiFetch(i+1).catch(()=>{});
+      const url=await cloudFetch(i);if(!LS.on||gen!==LS.gen||LS.paused)return;
+      if(i+1<LS.q.length)cloudFetch(i+1).catch(()=>{});
       if(!AU)AU=new Audio();AU.onended=()=>{if(LS.on&&gen===LS.gen&&!LS.paused){clearInterval(estT);LS.i++;speechNext()}};AU.onerror=()=>{toast('Errore audio')};
       AU.src=url;AU.playbackRate=S.set.rate;await AU.play();trackAudio(ch,gen)
-    }catch(e){if(LS.on&&gen===LS.gen){toast(e.message||'Errore voce OpenAI');LS.paused=true;mediaState();lpUpdate()}}
+    }catch(e){if(LS.on&&gen===LS.gen){toast(e.message||'Errore voce');LS.paused=true;mediaState();lpUpdate()}}
     return
   }
   const u=new SpeechSynthesisUtterance(ch.text);u.lang='it-IT';u.rate=S.set.rate;const v=pickVoice();if(v)u.voice=v;
@@ -785,14 +808,18 @@ function listenSheet(){
   const T=S.tts,dv=itVoices();
   sheet('<div class="hd"><h3>Ascolto</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+(LS.on?'Parte <span id="l-i" class="tab">'+(LS.i+1)+'</span> di '+LS.q.length+'. ':'')+'I controlli restano in basso mentre ascolti e sulla schermata di blocco.</div>'
    +'<div class="field"><label for="l-r">Velocità</label><input id="l-r" type="range" min="0.6" max="2" step="0.1" value="'+S.set.rate+'"></div>'
-   +'<div class="field"><label>Voce</label><div class="seg" id="l-eng"><button data-v="device"'+(T.engine==='device'?' class="on"':'')+'>Del telefono</button><button data-v="openai"'+(T.engine==='openai'?' class="on"':'')+'>Naturale (OpenAI)</button></div><div class="small mute">A schermo spento la voce OpenAI è la più affidabile. Quella del telefono può fermarsi quando lo schermo si spegne.</div></div>'
+   +'<div class="field"><label>Voce</label><div class="seg" id="l-eng"><button data-v="device"'+(T.engine==='device'?' class="on"':'')+'>Del telefono</button><button data-v="gemini"'+(T.engine==='gemini'?' class="on"':'')+'>Gemini</button><button data-v="openai"'+(T.engine==='openai'?' class="on"':'')+'>OpenAI</button></div><div class="small mute">A schermo spento servono Gemini o OpenAI. La voce del telefono può fermarsi quando lo schermo si spegne.</div></div>'
    +'<div id="l-dev"'+(T.engine==='device'?'':' hidden')+' class="stack"><div class="field"><label for="l-dv">Voce italiana del telefono</label><select id="l-dv" class="input"><option value="">Automatica (la migliore)</option>'+dv.map(v=>'<option value="'+esc(v.voiceURI)+'"'+(v.voiceURI===T.voice?' selected':'')+'>'+esc(v.name)+(v.localService?'':' (rete)')+'</option>').join('')+'</select></div></div>'
+   +'<div id="l-gem"'+(T.engine==='gemini'?'':' hidden')+' class="stack"><div class="field"><label for="l-gk">Chiave API Gemini (Google AI Studio)</label><input class="input" id="l-gk" type="password" autocomplete="off" placeholder="AIza..." value="'+esc(T.gkey)+'"></div><div class="field"><label for="l-gv">Voce</label><select id="l-gv" class="input">'+['Kore','Puck','Charon','Fenrir','Aoede','Leda','Zephyr','Orus'].map(v=>'<option'+(v===T.gvoice?' selected':'')+'>'+v+'</option>').join('')+'</select></div><div class="field"><label for="l-gm">Modello</label><input class="input" id="l-gm" type="text" value="'+esc(T.gmodel)+'"></div><div class="small mute">La chiave si crea gratis su aistudio.google.com, senza carta. Il piano gratuito ha dei limiti.</div></div>'
    +'<div id="l-oai"'+(T.engine==='openai'?'':' hidden')+' class="stack"><div class="field"><label for="l-ok">Chiave API OpenAI</label><input class="input" id="l-ok" type="password" autocomplete="off" placeholder="sk-..." value="'+esc(T.okey)+'"></div><div class="field"><label for="l-ov">Voce</label><select id="l-ov" class="input">'+OVOICES.map(v=>'<option'+(v===T.ovoice?' selected':'')+'>'+v+'</option>').join('')+'</select></div><div class="field"><label for="l-om">Modello</label><input class="input" id="l-om" type="text" value="'+esc(T.omodel)+'"></div></div>'
    +'<div class="row">'+(LS.on?'':'<button class="btn grow" id="l-go">Avvia l’ascolto</button>')+'</div>',box=>{
-    const restart=()=>{if(!LS.on)return;const was=LS.i/Math.max(1,LS.q.length);stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,T.engine==='openai');LS={on:true,q,i:0,paused:false,gen:LS.gen+1};pre={};keepAlive(T.engine==='device');lpUpdate();speechNext()};
+    const restart=()=>{if(!LS.on)return;const was=LS.i/Math.max(1,LS.q.length);stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0,T.engine!=='device');LS={on:true,q,i:0,paused:false,gen:LS.gen+1};pre={};keepAlive(T.engine==='device');lpUpdate();speechNext()};
     $('#l-r',box).onchange=e=>setRate(+e.target.value);
-    box.querySelectorAll('#l-eng button').forEach(b=>b.onclick=()=>{if(T.engine===b.dataset.v)return;T.engine=b.dataset.v;save();box.querySelectorAll('#l-eng button').forEach(x=>x.classList.toggle('on',x===b));$('#l-dev',box).hidden=T.engine!=='device';$('#l-oai',box).hidden=T.engine!=='openai';if(T.engine==='openai'&&!T.okey){if(LS.on)stopListen();toast('Inserisci la chiave OpenAI');return}restart()});
+    box.querySelectorAll('#l-eng button').forEach(b=>b.onclick=()=>{if(T.engine===b.dataset.v)return;T.engine=b.dataset.v;save();box.querySelectorAll('#l-eng button').forEach(x=>x.classList.toggle('on',x===b));$('#l-dev',box).hidden=T.engine!=='device';$('#l-oai',box).hidden=T.engine!=='openai';$('#l-gem',box).hidden=T.engine!=='gemini';if(T.engine==='openai'&&!T.okey){if(LS.on)stopListen();toast('Inserisci la chiave OpenAI');return}if(T.engine==='gemini'&&!T.gkey){if(LS.on)stopListen();toast('Inserisci la chiave Gemini');return}restart()});
     $('#l-dv',box).onchange=e=>{T.voice=e.target.value;save();if(LS.on&&T.engine==='device')respeak()};
+    $('#l-gk',box).onchange=e=>{T.gkey=e.target.value.trim();save()};
+    $('#l-gv',box).onchange=e=>{T.gvoice=e.target.value;save();if(T.engine==='gemini'&&LS.on)restart()};
+    $('#l-gm',box).onchange=e=>{T.gmodel=e.target.value.trim()||'gemini-2.5-flash-preview-tts';save()};
     $('#l-ok',box).onchange=e=>{T.okey=e.target.value.trim();save()};
     $('#l-ov',box).onchange=e=>{T.ovoice=e.target.value;save();if(T.engine==='openai'&&LS.on)restart()};
     $('#l-om',box).onchange=e=>{T.omodel=e.target.value.trim()||'gpt-4o-mini-tts';save()};
