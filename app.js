@@ -1,5 +1,5 @@
 "use strict";
-const VERSION='1.5';
+const VERSION='1.6';
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -806,7 +806,10 @@ function todayBanner(){
 async function remoteVersion(){try{const r=await fetch('app.js?v='+Date.now(),{cache:'no-store'});const m=/const VERSION='([^']+)'/.exec(await r.text());return m?m[1]:null}catch(e){return null}}
 async function applyUpdate(){
   toast('Aggiorno…');flushNow();
+  const files=['index.html','style.css','util.js','import.js','app.js','sw.js','manifest.webmanifest','pdf.js','pdf.worker.js','icon-192.png','icon-512.png'];
   try{if('serviceWorker' in navigator){const rs=await navigator.serviceWorker.getRegistrations();for(const r of rs)await r.unregister()}if(window.caches){for(const k of await caches.keys())await caches.delete(k)}}catch(e){}
+  /* riscarica i file saltando la cache del browser, altrimenti si rivede la versione vecchia */
+  try{await Promise.all(files.map(f=>fetch(f+'?u='+Date.now(),{cache:'reload'}).catch(()=>0)));await Promise.all(files.map(f=>fetch(f,{cache:'reload'}).catch(()=>0)))}catch(e){}
   location.reload()
 }
 /* ================= avvio ================= */
