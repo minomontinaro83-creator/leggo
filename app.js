@@ -797,7 +797,7 @@ function CL(){return S.cloud||(S.cloud={url:'',key:'',auto:true,last:0,h:'',up:{
 function clOk(){const c=CL();return !!(c.url&&c.key)}
 function clStatus(){const c=CL();if(!clOk())return 'Non configurato';if(c.err)return 'Errore: '+c.err;return c.last?'Ultimo salvataggio: '+new Date(c.last).toLocaleString('it-IT'):'Nessun salvataggio ancora'}
 function clShow(t){const e=document.getElementById('cl-s');if(e)e.textContent=t}
-async function clReq(a,q,opt){const c=CL();const r=await fetch(c.url+(c.url.includes('?')?'&':'?')+'a='+a+(q?'&'+q:''),{...(opt||{}),headers:{'X-Key':c.key,...((opt&&opt.headers)||{})}});if(!r.ok)throw new Error(r.status===403?'chiave errata':r.status===409?'trasferimento interrotto':'risposta '+r.status);return r}
+async function clReq(a,q,opt){const c=CL();const r=await fetch(c.url+(c.url.includes('?')?'&':'?')+'a='+a+(q?'&'+q:'')+'&_='+Date.now()+Math.random().toString(36).slice(2,6),{...(opt||{}),cache:'no-store',headers:{'X-Key':c.key,...((opt&&opt.headers)||{})}});if(!r.ok)throw new Error(r.status===403?'chiave errata':r.status===409?'trasferimento interrotto':'risposta '+r.status);return r}
 async function clPut(name,u8){const CH=1048576;if(!u8.length)return;for(let o=0;o<u8.length;o+=CH)await clReq('put','n='+encodeURIComponent(name)+'&o='+o+'&t='+u8.length,{method:'POST',body:u8.subarray(o,o+CH),headers:{'Content-Type':'application/octet-stream'}})}
 function clHash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return t.length+':'+h}
 let clBusy=false,clT=null;
