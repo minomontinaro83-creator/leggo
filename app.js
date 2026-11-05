@@ -1,6 +1,6 @@
 "use strict";
-const VERSION='1.10';
-const NEWS={"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.11';
+const NEWS={"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -12,7 +12,7 @@ const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,m
 let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
   tts:{engine:'device',voice:'',wps:17},seenV:null};
 try{const r=localStorage.getItem(SKEY);if(r){const o=JSON.parse(r);S={...S,...o,set:{...DEF,...(o.set||{})},tts:{...S.tts,...(o.tts||{}),engine:'device'}};['okey','gkey','ovoice','omodel','gvoice','gmodel'].forEach(k=>delete S.tts[k])}}catch(e){}
-let st=null;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}},250)}
+let st=null;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}cloudSoon()},250)}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),2400)}
 function applyTheme(){document.documentElement.dataset.t=S.set.theme;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=getComputedStyle(document.body).getPropertyValue('--bg').trim()||'#0c0f20'}
 const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
@@ -265,6 +265,7 @@ function rAltro(){
   +'<div class="card stack"><h3>Intelligenza artificiale</h3><div class="field"><label for="k">Chiave API Claude</label><input id="k" type="password" autocomplete="off" class="input" value="'+esc(S.key)+'"></div><div class="field"><label for="m">Modello</label><input id="m" class="input" type="text" value="'+esc(S.model)+'"></div><label class="row"><span class="grow">Cerca sul web nelle spiegazioni</span><input type="checkbox" id="w"'+(S.web?' checked':'')+'></label><div class="small mute">La chiave resta solo su questo dispositivo.</div></div>'
   +'<div class="card stack"><h3>Lettura</h3><div class="field"><div class="row"><label for="wpm" class="grow">Parole al minuto</label><span class="small mute tab" id="wpmv">'+S.wpm+'</span></div><input id="wpm" type="range" min="100" max="400" step="10" value="'+S.wpm+'"></div><div class="field"><div class="row"><label for="wpp" class="grow">Parole per pagina (libri senza pagine fisse)</label><span class="small mute tab" id="wppv">'+S.wpp+'</span></div><input id="wpp" type="range" min="150" max="400" step="10" value="'+S.wpp+'"></div></div>'
   +'<div class="card stack"><h3>Copia di sicurezza</h3><div class="small mute">Per cambiare telefono. La copia dei dati contiene segnalibri, note, evidenziazioni, progressi, obiettivi e impostazioni, chiavi API comprese. La copia completa contiene anche i libri.</div><div class="small tab" id="b-last">'+(S.lastBackup?'Ultima copia il '+fmtDateY(S.lastBackup):'Nessuna copia scaricata finora')+'</div><div class="row wrap"><button class="btn sec sm" id="b-exp">Scarica dati</button><button class="btn sec sm" id="b-zip">Scarica copia completa</button><button class="btn sec sm" id="b-imp">Importa</button></div></div>'
+  +'<div class="card stack"><h3>Salvataggio sul sito</h3><div class="small mute">Copia automatica di libri, progressi e impostazioni sul tuo sito. Per cambiare telefono, inserisci qui indirizzo e chiave e tocca Ripristina.</div><div class="field"><label for="cl-u">Indirizzo del file PHP</label><input class="input" id="cl-u" type="url" autocomplete="off" placeholder="https://tuosito.it/ebook1000-sync.php" value="'+esc(CL().url)+'"></div><div class="field"><label for="cl-k">Chiave</label><input class="input" id="cl-k" type="password" autocomplete="off" value="'+esc(CL().key)+'"></div><label class="row"><span class="grow">Salva in automatico</span><input type="checkbox" id="cl-a"'+(CL().auto?' checked':'')+'></label><div class="small tab" id="cl-s">'+clStatus()+'</div><div class="row wrap"><button class="btn sec sm" id="cl-now">Salva ora</button><button class="btn sec sm" id="cl-res">Ripristina dal sito</button></div></div>'
   +'<div class="card stack"><h3>Versione</h3><div class="small tab" id="ver">Versione '+VERSION+'</div><div class="small mute" id="ver-s"></div><div class="small" id="ver-n">'+newsHtml(VERSION)+'</div><div class="row wrap"><button class="btn sec sm" id="ver-c">Controlla aggiornamenti</button><button class="btn sec sm" id="ver-u">Aggiorna ora</button></div><div class="small mute">L’aggiornamento non tocca libri, note, segnalibri e progressi.</div></div>'
   +'<div class="card stack"><h3>Spazio</h3><div class="small mute" id="stg">Calcolo…</div></div>'
   +'<div class="small mute">I libri restano sul telefono. Nessun file viene inviato a nessuno, salvo i brani che chiedi di spiegare all’AI.</div></div>';
@@ -274,6 +275,8 @@ function rAltro(){
   $('#wpm').oninput=e=>{S.wpm=+e.target.value;$('#wpmv').textContent=S.wpm;save()};$('#wpp').oninput=e=>{S.wpp=+e.target.value;$('#wppv').textContent=S.wpp;save()};
   $('#ver-c').onclick=async()=>{const e=$('#ver-s');e.textContent='Controllo…';const r=await remoteVersion();if(r==null||r===VERSION){e.textContent=r==null?'Non riesco a controllare: serve la connessione.':'Hai già l’ultima versione ('+VERSION+').';return}e.innerHTML='Disponibile la versione '+r+'. Tocca Aggiorna ora.<br>'+newsHtml(r,remoteVersion.news)};
   $('#ver-u').onclick=applyUpdate;
+  $('#cl-u').onchange=e=>{CL().url=e.target.value.trim();CL().up={};CL().h='';save()};$('#cl-k').onchange=e=>{CL().key=e.target.value.trim();save()};$('#cl-a').onchange=e=>{CL().auto=e.target.checked;save()};
+  $('#cl-now').onclick=()=>{if(!clOk()){toast('Inserisci indirizzo e chiave');return}cloudPush(true)};$('#cl-res').onclick=()=>{if(!clOk()){toast('Inserisci indirizzo e chiave');return}cloudRestore()};
   $('#b-exp').onclick=exportData;$('#b-zip').onclick=exportZip;$('#b-imp').onclick=importSheet;
   if(navigator.storage&&navigator.storage.estimate)navigator.storage.estimate().then(e=>{const mb=x=>(x/1048576).toFixed(0);$('#stg').textContent='Occupati '+mb(e.usage)+' MB su circa '+mb(e.quota)+' disponibili.'}).catch(()=>{$('#stg').textContent=''});else $('#stg').textContent='';
 }
@@ -789,6 +792,43 @@ async function applyUpdate(){
   try{await Promise.all(files.map(f=>fetch(f+'?u='+Date.now(),{cache:'reload'}).catch(()=>0)));await Promise.all(files.map(f=>fetch(f,{cache:'reload'}).catch(()=>0)))}catch(e){}
   location.reload()
 }
+/* ================= salvataggio sul sito ================= */
+function CL(){return S.cloud||(S.cloud={url:'',key:'',auto:true,last:0,h:'',up:{},err:''})}
+function clOk(){const c=CL();return !!(c.url&&c.key)}
+function clStatus(){const c=CL();if(!clOk())return 'Non configurato';if(c.err)return 'Errore: '+c.err;return c.last?'Ultimo salvataggio: '+new Date(c.last).toLocaleString('it-IT'):'Nessun salvataggio ancora'}
+function clShow(t){const e=document.getElementById('cl-s');if(e)e.textContent=t}
+async function clReq(a,q,opt){const c=CL();const r=await fetch(c.url+(c.url.includes('?')?'&':'?')+'a='+a+(q?'&'+q:''),{...(opt||{}),headers:{'X-Key':c.key,...((opt&&opt.headers)||{})}});if(!r.ok)throw new Error(r.status===403?'chiave errata':r.status===409?'trasferimento interrotto':'risposta '+r.status);return r}
+async function clPut(name,u8){const CH=1048576;if(!u8.length)return;for(let o=0;o<u8.length;o+=CH)await clReq('put','n='+encodeURIComponent(name)+'&o='+o+'&t='+u8.length,{method:'POST',body:u8.subarray(o,o+CH),headers:{'Content-Type':'application/octet-stream'}})}
+function clHash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))|0;return t.length+':'+h}
+let clBusy=false,clT=null;
+function cloudSoon(){clearTimeout(clT);if(clOk()&&CL().auto)clT=setTimeout(()=>cloudPush(false),30000)}
+async function cloudPush(manual){
+  if(clBusy||!clOk()||(!manual&&!navigator.onLine))return;clBusy=true;const c=CL();
+  const keep=()=>{try{localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}};
+  try{
+    const o=dataObj(false);o.S.key='';delete o.S.cloud;const js=JSON.stringify(o),h=clHash(js);
+    if(manual||h!==c.h){clShow('Salvo i dati…');await clPut('state.json',new TextEncoder().encode(js));c.h=h}
+    const todo=LIB.filter(b=>!c.up[b.id]);
+    for(let i=0;i<todo.length;i++){const b=todo[i];clShow('Carico libro '+(i+1)+' di '+todo.length+'…');const f=await IDB.get('files',b.id);
+      if(f){const u8=f instanceof Blob?new Uint8Array(await f.arrayBuffer()):new Uint8Array(f.buffer?f.buffer:f);await clPut('book-'+b.id+'.'+b.ext,u8)}
+      c.up[b.id]=1;keep()}
+    c.last=Date.now();c.err='';keep();if(manual)toast('Salvato sul sito')
+  }catch(e){c.err=e.message==='Failed to fetch'?'sito non raggiungibile (indirizzo o CORS)':e.message;keep();if(manual)toast('Salvataggio non riuscito')}
+  finally{clBusy=false;clShow(clStatus())}
+}
+async function cloudRestore(){
+  try{
+    impUI('Leggo il sito',.02,'');const list=await (await clReq('list')).json();const names=list.map(x=>x.n);
+    if(names.includes('state.json')){const o=await (await clReq('get','n=state.json')).json();mergeData(o)}
+    const bs=names.filter(n=>/^book-/.test(n));let added=0;
+    for(let i=0;i<bs.length;i++){const n=bs[i];const id=n.replace(/^book-|\.[^.]+$/g,'');CL().up[id]=1;if(bookById(id))continue;const kn=S.known[id]||{};
+      try{impUI('Scarico '+(i+1)+' di '+bs.length,i/bs.length,kn.title||n);const buf=await (await clReq('get','n='+encodeURIComponent(n))).arrayBuffer();
+        const file=new File([buf],'libro.'+n.split('.').pop());const res=await importFile(file,()=>{});await storeBook(res,{title:kn.title,author:kn.author});added++}
+      catch(er){toast((kn.title||n)+': '+er.message)}}
+    save();$('#imp').classList.remove('on');go(curView);toast('Ripristinato: '+added+' libri')
+  }catch(e){$('#imp').classList.remove('on');toast('Errore: '+(e.message==='Failed to fetch'?'sito non raggiungibile':e.message))}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&clOk()&&CL().auto)cloudPush(false)});
 /* ================= avvio ================= */
 (async function boot(){
   applyTheme();
@@ -798,6 +838,7 @@ async function applyUpdate(){
   const firstRun=S.seenV==null&&!LIB.length&&!Object.keys(S.bk).length;
   if(S.seenV!==VERSION){S.seenV=VERSION;save();if(!firstRun&&NEWS[VERSION])setTimeout(()=>sheet('<div class="hd"><h3>Aggiornato alla '+VERSION+'</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small stack">'+newsHtml(VERSION)+'</div>',()=>{}),1200)}
   setTimeout(()=>{if(!$('#reader').classList.contains('open')&&$('#resume').hidden&&!$('#sh').classList.contains('open'))todayBanner()},900);
+  setTimeout(()=>{if(clOk()&&CL().auto)cloudPush(false)},6000);
   setTimeout(async()=>{const r=await remoteVersion();if(r&&r!==VERSION&&!$('#reader').classList.contains('open'))banner('Nuova versione '+r+' disponibile'+(remoteVersion.news&&remoteVersion.news[r]?': '+remoteVersion.news[r][0]:''),[{l:'Aggiorna',fn:applyUpdate}],20000)},2500);
   const q=S.sess;if(!q)return;
   try{
