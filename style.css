@@ -156,7 +156,18 @@ select.input{appearance:auto}
 input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
 
 #reader.pinbar.immersive .rbot{transform:none;opacity:1;pointer-events:auto;position:static}
-.lesson-end{margin:18px 0;padding:8px 12px;border-top:2px solid var(--acc);border-bottom:2px solid var(--acc);color:var(--acc);text-align:center;font:600 13px system-ui,sans-serif;text-indent:0}
+#rscroll{overflow-anchor:none}
+.lesson-end{position:relative;margin:26px 0;padding:16px 14px 14px;border-radius:18px;text-align:center;text-indent:0;font:700 15px system-ui,sans-serif;color:#fff;background:linear-gradient(120deg,#ff7a18,#ff3d81,#8e44ff,#18a0ff,#17c58b,#ff7a18);background-size:300% 300%;animation:leFlow 6s ease infinite,lePop .7s cubic-bezier(.2,1.4,.4,1) both;box-shadow:0 6px 22px rgba(255,61,129,.35);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;overflow:hidden}
+.lesson-end::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-120%);animation:leShine 3.2s ease-in-out infinite}
+.lesson-end .le-t{letter-spacing:.3px;text-shadow:0 1px 2px rgba(0,0,0,.25)}
+.lesson-end .le-s{display:inline-block;font-size:20px;animation:leStar 1.6s ease-in-out infinite}
+.lesson-end .le-s:last-of-type{animation-delay:.8s}
+.lesson-end small{flex-basis:100%;font:500 12px system-ui,sans-serif;opacity:.95}
+@keyframes leFlow{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+@keyframes leShine{0%,55%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+@keyframes leStar{0%,100%{transform:scale(1) rotate(0)}50%{transform:scale(1.35) rotate(25deg)}}
+@keyframes lePop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion:reduce){.lesson-end,.lesson-end::after,.lesson-end .le-s{animation:none}}
 
 #rtext{position:relative;z-index:1}
 #hlw{position:absolute;left:0;top:0;width:0;height:0;z-index:0;pointer-events:none}

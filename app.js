@@ -1,6 +1,6 @@
 "use strict";
-const VERSION='1.16';
-const NEWS={"1.16":["Timer e orario ancora un poco più verso il centro"],"1.15":["Timer e orario più spostati verso il centro, per non essere tagliati dagli angoli arrotondati del telefono"],"1.14":["Il timer in alto conta tutta la lettura della giornata, anche se esci dal libro o ne apri un altro"],"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.17';
+const NEWS={"1.17":["Lettura a scorrimento continuo: tutto il libro è un’unica pagina, passi da un capitolo all’altro scorrendo","Tolto il pulsante «Capitolo successivo»","Nuovo segnaposto animato e colorato a fine tappa giornaliera"],"1.16":["Timer e orario ancora un poco più verso il centro"],"1.15":["Timer e orario più spostati verso il centro, per non essere tagliati dagli angoli arrotondati del telefono"],"1.14":["Il timer in alto conta tutta la lettura della giornata, anche se esci dal libro o ne apri un altro"],"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -326,7 +326,7 @@ function openLib(kind){
 /* ================= parole da imparare ================= */
 const WINT=[1,3,7,16,35,90];
 function sentenceAround(d){
-  try{const bl=d.blocks[0],el=htmlBody(R.content[R.c]).children[bl.b];if(!el)return '';const t=el.textContent;
+  try{const bl=d.blocks[0],el=htmlBody(R.content[d.c!=null?d.c:R.c]).children[bl.b];if(!el)return '';const t=el.textContent;
     let x=0;for(let i=bl.s-1;i>=0;i--){if('.!?…'.includes(t[i])){x=i+1;break}}
     let z=t.length;for(let i=bl.e;i<t.length;i++){if('.!?…'.includes(t[i])){z=i+1;break}}
     return t.slice(x,z).replace(/\s+/g,' ').trim().slice(0,320)
@@ -433,7 +433,7 @@ function importSheet(){
 }
 
 /* ================= lettore ================= */
-const R={id:null,b:null,content:null,c:0,bw:[],cw:0,sel:null,pages:1,page:0,seekDrag:false,back:null,pgNow:0,idx:null};
+const R={id:null,b:null,content:null,c:0,bw:[],cw:0,bws:{},cws:{},lo:0,hi:0,sel:null,pages:1,page:0,seekDrag:false,back:null,pgNow:0,idx:null};
 /* ---------- timer di lettura, orologio, schermo intero ---------- */
 const RT={sess:0,act:Date.now(),tick:0};
 const fmtClock=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
@@ -485,29 +485,66 @@ function wrapRange(el,s,e,cls,gid){
   while((n=w.nextNode())){const len=n.nodeValue.length;const a=Math.max(s,pos),z=Math.min(e,pos+len);if(a<z)todo.push([n,a-pos,z-pos]);pos+=len;if(pos>=e)break}
   todo.forEach(([n,a,z])=>{const r=document.createRange();r.setStart(n,a);r.setEnd(n,z);const m=document.createElement('mark');m.className=cls;m.dataset.g=gid;r.surroundContents(m)})
 }
-function drawChapter(c){
-  R.c=c;const ch=R.b.chapters[c],last=c===R.b.chapters.length-1;
-  const body=htmlBody(R.content[c]);R.bw=[];let acc=0;
-  [...body.children].forEach((k,i)=>{k.setAttribute('data-i',i);R.bw[i]=acc;acc+=wc(k.textContent)});R.cw=acc;
+const blkEl=(c,b)=>document.querySelector('#rtext > [data-c="'+c+'"][data-i="'+b+'"]');
+function makeChap(c){
+  const ch=R.b.chapters[c],body=htmlBody(R.content[c]),bw=[];let acc=0;
+  [...body.children].forEach((k,i)=>{k.setAttribute('data-c',c);k.setAttribute('data-i',i);bw[i]=acc;acc+=wc(k.textContent)});
+  R.bws[c]=bw;R.cws[c]=acc;
+  const d=document.createElement('div');d.innerHTML='<h2 class="ct" data-c="'+c+'">'+esc(ch.t)+'</h2>';
+  [...body.childNodes].forEach(n=>d.appendChild(n));
   const s=BK(R.id);
-  let end;
-  if(!last)end='<div class="done-box"><button class="btn sec" id="c-next">Capitolo successivo</button><div class="small mute" style="margin-top:8px">'+esc(R.b.chapters[c+1].t)+'</div></div>';
-  else end='<div class="done-box">'+(s.done?'<div class="mute">Libro segnato come letto</div><br><button class="btn sec" id="d-undo">Togli il segno</button>':'<div class="mute">Fine del libro</div><br><button class="btn" id="d-done">Segna come letto</button>')+'</div>';
-  $('#rtext').innerHTML='<h2 class="ct">'+esc(ch.t)+'</h2>'+body.innerHTML+end;
-  const root=$('#rtext');
-  s.ann.filter(a=>a.c===c).forEach(a=>{const el=root.querySelector(':scope > [data-i="'+a.b+'"]');if(el)wrapRange(el,a.s,a.e,annClass(a),a.gid)});
-  s.bm.filter(x=>x.c===c).forEach(x=>{const el=root.querySelector(':scope > [data-i="'+x.b+'"]');if(el)el.classList.add('bmk')});
+  s.ann.filter(a=>a.c===c).forEach(a=>{const el=d.querySelector(':scope > [data-i="'+a.b+'"]');if(el)wrapRange(el,a.s,a.e,annClass(a),a.gid)});
+  s.bm.filter(x=>x.c===c).forEach(x=>{const el=d.querySelector(':scope > [data-i="'+x.b+'"]');if(el)el.classList.add('bmk')});
   const pl=planInfo(R.b);
-  if(pl&&!pl.late&&!pl.paused&&!pl.wait&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){const tw=pl.toW-R.b.chapters[c].w0;let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});const el=root.querySelector(':scope > [data-i="'+bi+'"]');
-    if(el){const m=document.createElement('div');m.className='lesson-end';m.textContent='Fine della tappa di oggi ('+pl.L+' di '+pl.n+')';el.after(m)}}
-  $('#r-title').textContent=R.b.title;
-  const n=$('#c-next');if(n)n.onclick=()=>chapterStep(1);
-  const dd=$('#d-done');if(dd)dd.onclick=()=>{const x=BK(R.id);x.done=true;x.w=R.b.words;x.max=R.b.words;save();drawChapter(R.c);toast('Libro letto')};
-  const du=$('#d-undo');if(du)du.onclick=()=>{BK(R.id).done=false;save();drawChapter(R.c)};
-  layoutPages();updateInfo()
+  if(pl&&!pl.late&&!pl.paused&&!pl.wait&&pl.toW<R.b.words&&chapterAtW(R.b,pl.toW)===c){
+    const tw=pl.toW-ch.w0;let bi=0;bw.forEach((x,i)=>{if(x<=tw)bi=i});
+    const m=document.createElement('div');m.className='lesson-end';m.dataset.w=pl.toW;
+    m.innerHTML='<span class="le-s">★</span><span class="le-t">Fine della tappa di oggi</span><span class="le-s">★</span><small>tappa '+pl.L+' di '+pl.n+' · bravo, puoi fermarti qui</small>';
+    const el=tw>0?d.querySelector(':scope > [data-i="'+bi+'"]'):null;
+    if(el)el.after(m);else if(tw<=0)d.insertBefore(m,d.firstChild);else d.appendChild(m)}
+  return [...d.childNodes]
 }
-function refresh(){const sc=$('#rscroll').scrollTop,pg=R.page;drawChapter(R.c);$('#rscroll').scrollTop=sc;if(S.set.mode==='pages')showPage(pg)}
-function chapterStep(dir){const c=R.c+dir;if(c<0||c>=R.b.chapters.length)return;savePos();drawChapter(c);$('#rscroll').scrollTop=0;showPage(0);savePos()}
+function fixEnd(){
+  const old=$('#endbox');if(old)old.remove();
+  if(R.hi!==R.b.chapters.length-1)return;
+  const s=BK(R.id),e=document.createElement('div');e.id='endbox';e.className='done-box';
+  e.innerHTML=s.done?'<div class="mute">Libro segnato come letto</div><br><button class="btn sec" id="d-undo">Togli il segno</button>':'<div class="mute">Fine del libro</div><br><button class="btn" id="d-done">Segna come letto</button>';
+  $('#rtext').appendChild(e);
+  const dd=$('#d-done');if(dd)dd.onclick=()=>{const x=BK(R.id);x.done=true;x.w=R.b.words;x.max=R.b.words;save();refresh();toast('Libro letto')};
+  const du=$('#d-undo');if(du)du.onclick=()=>{BK(R.id).done=false;save();refresh()}
+}
+function drawChapter(c){ // ricostruisce la finestra attorno al capitolo c
+  const root=$('#rtext');root.innerHTML='';R.bws={};R.cws={};R.lo=R.hi=R.c=c;
+  makeChap(c).forEach(n=>root.appendChild(n));R.bw=R.bws[c];R.cw=R.cws[c];fixEnd();
+  $('#r-title').textContent=R.b.title;
+  layoutPages();extendWin();updateInfo()
+}
+function addChap(c,after){
+  const root=$('#rtext'),sc=$('#rscroll'),nodes=makeChap(c);
+  if(after){const eb=$('#endbox');if(eb)eb.remove();nodes.forEach(n=>root.appendChild(n));R.hi=c;fixEnd()}
+  else{const h0=sc.scrollHeight,t0=sc.scrollTop,first=root.firstChild;nodes.forEach(n=>root.insertBefore(n,first));sc.scrollTop=t0+(sc.scrollHeight-h0);R.lo=c}
+}
+function extendWin(){ // scorrimento continuo: aggiunge capitoli sotto e sopra man mano che si legge
+  if(S.set.mode==='pages'||!R.b)return;
+  const sc=$('#rscroll'),last=R.b.chapters.length-1;let n=0;
+  while(R.hi<last&&sc.scrollHeight-sc.scrollTop-sc.clientHeight<sc.clientHeight*2&&n++<6)addChap(R.hi+1,true);
+  while(R.lo>0&&sc.scrollTop<sc.clientHeight*1.5&&n++<12)addChap(R.lo-1,false)
+}
+function ensureCh(c){while(R.hi<c)addChap(R.hi+1,true);while(R.lo>c)addChap(R.lo-1,false)}
+function syncC(){
+  if(S.set.mode==='pages'||!R.b)return;const e=anchorEl();
+  if(e){const c=+e.dataset.c;if(c!==R.c&&R.bws[c]){R.c=c;R.bw=R.bws[c];R.cw=R.cws[c]}}
+}
+function refresh(){
+  if(S.set.mode==='pages'){const sc=$('#rscroll').scrollTop,pg=R.page;drawChapter(R.c);$('#rscroll').scrollTop=sc;showPage(pg);return}
+  const a=getAnchor()||BK(R.id).pos;drawChapter(a&&a.c!=null?a.c:R.c);if(a)restoreAnchor(a)
+}
+function chapterStep(dir){
+  const c=R.c+dir;if(c<0||c>=R.b.chapters.length)return;savePos();
+  if(S.set.mode==='pages'){drawChapter(c);$('#rscroll').scrollTop=0;showPage(0)}
+  else{if(c<R.lo||c>R.hi)drawChapter(c);const h=$('#rtext > h2[data-c="'+c+'"]'),sc=$('#rscroll');if(h)sc.scrollTop+=h.getBoundingClientRect().top-sc.getBoundingClientRect().top;extendWin();updateInfo()}
+  savePos()
+}
 $('#r-prev').onclick=()=>{if(S.set.mode==='pages'&&R.page>0)return showPage(R.page-1);chapterStep(-1)};
 $('#r-next').onclick=()=>{if(S.set.mode==='pages'&&R.page<R.pages-1)return showPage(R.page+1);chapterStep(1)};
 
@@ -523,17 +560,32 @@ function gotoPageOf(el){const t=$('#rtext'),w=$('#rscroll').clientWidth;const x=
 
 /* posizione e progresso */
 function chPr(){const sc=$('#rscroll');if(S.set.mode==='pages')return R.pages>1?R.page/(R.pages-1):0;const m=sc.scrollHeight-sc.clientHeight;return m>0?Math.max(0,Math.min(1,sc.scrollTop/m)):0}
-function curW(){const ch=R.b.chapters[R.c];return ch.w0+chPr()*ch.n}
+function curW(){
+  const chs=R.b.chapters;
+  if(S.set.mode==='pages'){const ch=chs[R.c];return ch.w0+chPr()*ch.n}
+  const sc=$('#rscroll'),e=anchorEl();if(!e)return chs[R.c].w0;
+  const c=+e.dataset.c,i=+e.dataset.i,bw=R.bws[c],ch=chs[c];if(!bw)return ch.w0;
+  const end=i+1<bw.length?bw[i+1]:R.cws[c],r=e.getBoundingClientRect(),sr=sc.getBoundingClientRect();
+  const f=r.height>0?Math.max(0,Math.min(1,(sr.top-r.top)/r.height)):0;
+  let w=Math.min(ch.w0+ch.n,ch.w0+bw[i]+f*(end-bw[i]));
+  const m=document.querySelector('#rtext > .lesson-end');if(m&&m.getBoundingClientRect().top<sr.bottom-8)w=Math.max(w,+m.dataset.w);
+  const lc=chs[chs.length-1];if(R.hi===chs.length-1&&sc.scrollHeight-sc.scrollTop-sc.clientHeight<4)w=Math.max(w,lc.w0+lc.n);
+  return w
+}
 function anchorEl(){
   const sc=$('#rscroll'),top=sc.getBoundingClientRect().top,left=sc.getBoundingClientRect().left,pg=S.set.mode==='pages';
-  for(const e of document.querySelectorAll('#rtext > [data-i]')){const r=e.getBoundingClientRect();if(pg?(r.right>left+4&&r.left<left+sc.clientWidth):(r.bottom>top+2))return e}
-  return null
+  const list=document.querySelectorAll('#rtext > [data-i]');
+  if(pg){for(const e of list){const r=e.getBoundingClientRect();if(r.right>left+4&&r.left<left+sc.clientWidth)return e}return null}
+  let lo=0,hi=list.length-1,ans=null;
+  while(lo<=hi){const m=(lo+hi)>>1;if(list[m].getBoundingClientRect().bottom>top+2){ans=list[m];hi=m-1}else lo=m+1}
+  return ans
 }
-function getAnchor(){try{const e=anchorEl();if(!e)return null;const sc=$('#rscroll');return {c:R.c,b:+e.dataset.i,off:S.set.mode==='pages'?0:Math.round(e.getBoundingClientRect().top-sc.getBoundingClientRect().top)}}catch(e){return null}}
+function getAnchor(){try{const e=anchorEl();if(!e)return null;const sc=$('#rscroll');return {c:+e.dataset.c,b:+e.dataset.i,off:S.set.mode==='pages'?0:Math.round(e.getBoundingClientRect().top-sc.getBoundingClientRect().top)}}catch(e){return null}}
 function restoreAnchor(a){
-  if(!a||!R.b)return false;if(a.c!=null&&a.c!==R.c)drawChapter(a.c);
-  const el=$('#rtext > [data-i="'+a.b+'"]');if(!el)return false;
-  if(S.set.mode==='pages')gotoPageOf(el);else{const sc=$('#rscroll');sc.scrollTop+=el.getBoundingClientRect().top-sc.getBoundingClientRect().top-(a.off||0)}
+  if(!a||!R.b)return false;
+  if(a.c!=null&&(S.set.mode==='pages'?a.c!==R.c:(a.c<R.lo||a.c>R.hi)))drawChapter(a.c);
+  const el=blkEl(a.c!=null?a.c:R.c,a.b);if(!el)return false;
+  if(S.set.mode==='pages')gotoPageOf(el);else{const sc=$('#rscroll');sc.scrollTop+=el.getBoundingClientRect().top-sc.getBoundingClientRect().top-(a.off||0);extendWin()}
   updateInfo();return true
 }
 function savePos(){
@@ -544,7 +596,7 @@ function flushNow(){try{if($('#reader').classList.contains('open'))savePos();cle
 let pgT=0;
 function barDay(p){return !!p&&!p.paused&&!p.wait&&S.set.bar==='day'}
 function updateInfo(){
-  if(!R.b)return;const b=R.b,w=curW(),f=b.words?Math.min(1,w/b.words):0;
+  if(!R.b)return;syncC();const b=R.b,w=curW(),f=b.words?Math.min(1,w/b.words):0;
   const pg=b.ext==='pdf'&&R.pgNow?R.pgNow:Math.max(1,Math.min(pagesOf(b),Math.round(f*pagesOf(b))||1));
   const p=planInfo(b,w),day=barDay(p),mode=S.set.bar;
   if(!R.seekDrag)$('#r-seek').value=day?Math.round(Math.max(0,Math.min(1,p.pctDay))*1000):Math.round(f*1000);
@@ -556,7 +608,7 @@ function updateInfo(){
   $('#r-tp').style.width=(f*100)+'%'
 }
 $('#rscroll').addEventListener('scroll',()=>{
-  if(S.set.mode==='pages')return;updateInfo();clearTimeout(savePos.h);savePos.h=setTimeout(savePos,500);
+  if(S.set.mode==='pages')return;extendWin();updateInfo();clearTimeout(savePos.h);savePos.h=setTimeout(savePos,500);
   if(R.b&&R.b.ext==='pdf'){const n=Date.now();if(n-pgT>200){pgT=n;const e=anchorEl();if(e&&e.dataset.pg){R.pgNow=+e.dataset.pg;updateInfo()}}}
 });
 window.addEventListener('resize',()=>{if($('#reader').classList.contains('open'))layoutPages()});
@@ -581,8 +633,8 @@ function toggleBm(c,b){const s=BK(R.id);const i=s.bm.findIndex(x=>x.c===c&&x.b==
 function jumpW(w,silent){
   const chs=R.b.chapters;let c=chs.length-1;for(let i=0;i<chs.length;i++){if(w<chs[i].w0+chs[i].n){c=i;break}}
   const before=getAnchor();if(before)R.back=before;
-  if(c!==R.c){savePos();drawChapter(c)}
-  const tw=Math.max(0,w-chs[c].w0);let bi=0;R.bw.forEach((x,i)=>{if(x<=tw)bi=i});
+  if(S.set.mode==='pages'?c!==R.c:(c<R.lo||c>R.hi)){savePos();drawChapter(c)}
+  const tw=Math.max(0,w-chs[c].w0);let bi=0;(R.bws[c]||[]).forEach((x,i)=>{if(x<=tw)bi=i});
   restoreAnchor({c,b:bi,off:20});savePos();
   if(R.back&&!silent)banner('Hai cambiato punto',[{l:'Torna dov’ero',fn:()=>{const x=R.back;restoreAnchor(x);savePos()}}],8000)
 }
@@ -616,9 +668,10 @@ function getSelDesc(){
     if(!r.intersectsNode(el))return;const rng=document.createRange();rng.selectNodeContents(el);
     const s=r.compareBoundaryPoints(Range.START_TO_START,rng)>0?offIn(el,r.startContainer,r.startOffset):0;
     const e=r.compareBoundaryPoints(Range.END_TO_END,rng)<0?offIn(el,r.endContainer,r.endOffset):el.textContent.length;
-    if(e>s)blocks.push({b:+el.dataset.i,s,e})});
+    if(e>s)blocks.push({c:+el.dataset.c,b:+el.dataset.i,s,e})});
   const text=sel.toString().replace(/\s+/g,' ').trim();
-  return blocks.length&&text?{blocks,text}:null
+  if(blocks.length){const c0=blocks[0].c;const bl=blocks.filter(x=>x.c===c0);return text?{c:c0,blocks:bl,text}:null}
+  return null
 }
 let selT=null;
 document.addEventListener('selectionchange',()=>{
@@ -630,8 +683,8 @@ function hideSel(){$('#selbar').classList.remove('open')}
 function endSel(){R.sel=null;try{window.getSelection().removeAllRanges()}catch(e){}hideSel()}
 $('#selbar').addEventListener('pointerdown',e=>e.preventDefault());
 function newGid(){return 'a'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
-function addAnn(d,k,col,txt){const s=BK(R.id),gid=newGid();d.blocks.forEach((bl,i)=>s.ann.push({id:gid+'_'+i,gid,k,c:R.c,b:bl.b,s:bl.s,e:bl.e,col:col||0,txt:i===0?(txt||''):'',t:i===0?d.text.slice(0,300):'',ts:Date.now()}));save();return gid}
-function overlaps(a,d){return a.c===R.c&&d.blocks.some(bl=>bl.b===a.b&&a.s<bl.e&&bl.s<a.e)}
+function addAnn(d,k,col,txt){const s=BK(R.id),gid=newGid();d.blocks.forEach((bl,i)=>s.ann.push({id:gid+'_'+i,gid,k,c:d.c!=null?d.c:R.c,b:bl.b,s:bl.s,e:bl.e,col:col||0,txt:i===0?(txt||''):'',t:i===0?d.text.slice(0,300):'',ts:Date.now()}));save();return gid}
+function overlaps(a,d){return a.c===(d.c!=null?d.c:R.c)&&d.blocks.some(bl=>bl.b===a.b&&a.s<bl.e&&bl.s<a.e)}
 function clearAnn(d,kinds){const s=BK(R.id);const gids=new Set(s.ann.filter(a=>kinds.includes(a.k)&&overlaps(a,d)).map(a=>a.gid));s.ann=s.ann.filter(a=>!gids.has(a.gid));save()}
 document.querySelectorAll('#sb-sw button').forEach(b=>b.onclick=()=>{
   if(!R.sel)return;const c=+b.dataset.c;
@@ -640,7 +693,7 @@ document.querySelectorAll('#sb-sw button').forEach(b=>b.onclick=()=>{
 $('#sb-x').onclick=()=>endSel();
 $('#sb-dif').onclick=()=>{if(!R.sel)return;clearAnn(R.sel,['q']);addAnn(R.sel,'q',0,'');endSel();refresh();toast('Segnato come da capire')};
 $('#sb-word').onclick=()=>{if(R.sel)wordSheet(R.sel)};
-$('#sb-bm').onclick=()=>{if(!R.sel)return;const b=R.sel.blocks[0].b;toggleBm(R.c,b);endSel();refresh()};
+$('#sb-bm').onclick=()=>{if(!R.sel)return;const b=R.sel.blocks[0].b;toggleBm(R.sel.c!=null?R.sel.c:R.c,b);endSel();refresh()};
 $('#sb-copy').onclick=async()=>{if(!R.sel)return;try{await navigator.clipboard.writeText(R.sel.text+' ('+R.b.title+(R.b.author?', '+R.b.author:'')+')');toast('Copiato')}catch(e){toast('Copia non riuscita')}};
 $('#sb-note').onclick=()=>{if(!R.sel)return;const d=R.sel;sheet('<div class="hd"><h3>Nota</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+esc(d.text.slice(0,200))+'</div><div class="field"><textarea id="ne" placeholder="Il tuo appunto"></textarea></div><button class="btn" id="ns">Salva</button>',box=>{
   $('#ns',box).onclick=()=>{const v=$('#ne',box).value.trim();if(!v)return toast('Scrivi una nota');addAnn(d,'h',0,v);closeSheet(()=>{endSel();refresh()})}})};
@@ -653,7 +706,7 @@ function annSheet(gid){
     box.querySelectorAll('#as-sw button').forEach(b=>b.onclick=()=>{first.col=+b.dataset.c;recs.forEach(r=>r.col=first.col);save();closeSheet(()=>refresh())});
     $('#as',box).onclick=()=>{first.txt=$('#an',box).value.trim();if(first.k==='h'&&!first.col&&!first.txt)s.ann=s.ann.filter(a=>a.gid!==gid);save();closeSheet(()=>refresh())};
     $('#ad',box).onclick=()=>{s.ann=s.ann.filter(a=>a.gid!==gid);save();closeSheet(()=>refresh())};
-    $('#aa',box).onclick=()=>aiPanel({blocks:recs.map(r=>({b:r.b,s:r.s,e:r.e})),text:recs.map(r=>r.t).join(' ')})})
+    $('#aa',box).onclick=()=>aiPanel({c:first.c,blocks:recs.map(r=>({b:r.b,s:r.s,e:r.e})),text:recs.map(r=>r.t).join(' ')})})
 }
 
 /* ---------- indice, segnalibri, note, cerca nel libro ---------- */
@@ -734,15 +787,15 @@ async function askClaude(messages,{web=false,max=1800}={}){
   return (j.content||[]).filter(c=>c.type==='text').map(c=>c.text).join('').trim()
 }
 const fmtAI=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/^#+\s*(.+)$/gm,'<b>$1</b>');
-function visibleText(max){const e=anchorEl();let i=e?+e.dataset.i:0,out='';const kids=document.querySelectorAll('#rtext > [data-i]');for(;i<kids.length&&out.length<max;i++)out+=kids[i].textContent+'\n';return out.trim()}
-function chapterText(){return textOf(R.content[R.c]).replace(/\s+/g,' ').trim()}
+function visibleText(max){const e=anchorEl(),kids=[...document.querySelectorAll('#rtext > [data-i]')];let i=e?Math.max(0,kids.indexOf(e)):0,out='';for(;i<kids.length&&out.length<max;i++)out+=kids[i].textContent+'\n';return out.trim()}
+function chapterText(c){return textOf(R.content[c!=null?c:R.c]).replace(/\s+/g,' ').trim()}
 function aiPanel(sel){
-  const b=R.b,ch=b.chapters[R.c];const s=BK(R.id);
+  const b=R.b,cc=sel&&sel.c!=null?sel.c:R.c,ch=b.chapters[cc];const s=BK(R.id);
   const passage0=sel?sel.text:visibleText(3500);
   const scopeLbl=sel?'Testo selezionato':'Quello che stai leggendo';
-  const hk='c'+R.c+(sel?'|'+norm(sel.text).slice(0,40):'');s.chat=s.chat||{};const hist=s.chat[hk]||(s.chat[hk]=[]);
+  const hk='c'+cc+(sel?'|'+norm(sel.text).slice(0,40):'');s.chat=s.chat||{};const hist=s.chat[hk]||(s.chat[hk]=[]);
   const PRE=[['Spiega il brano','Spiega in modo chiaro cosa dice questo brano, i passaggi difficili e il senso complessivo.'],
-   ['Riassumi il capitolo','Riassumi il capitolo in modo chiaro e fedele, in al massimo 200 parole.',()=>chapterText().slice(0,40000)],
+   ['Riassumi il capitolo','Riassumi il capitolo in modo chiaro e fedele, in al massimo 200 parole.',()=>chapterText(cc).slice(0,40000)],
    ['Termini e riferimenti','Spiega i termini difficili, i nomi e i riferimenti storici, culturali o letterari presenti nel brano.'],
    ['Contesto dell’opera','Dammi il contesto dell’opera e dell’autore utile per capire questo brano. Se non conosci con certezza l’opera, dillo.'],
    ['Domande di verifica','Proponi 5 domande di verifica sul brano, poi le risposte in fondo.']];
@@ -754,7 +807,7 @@ function aiPanel(sel){
    +'<div class="row"><button class="btn grow" id="ai-send">Chiedi</button><button class="btn sec" id="ai-clear">Azzera</button></div>',box=>{
     const log=$('#ai-log',box);
     const draw=()=>{log.innerHTML=hist.map((h,i)=>'<div class="stack"><div class="q-note"><b>'+esc(h.label||h.q)+'</b></div><div class="ai">'+fmtAI(h.a)+'</div><div class="row wrap"><button class="btn sec sm" data-sv="'+i+'">Salva come nota</button></div></div>').join('<hr style="border:0;border-top:1px solid var(--line);width:100%">');
-      log.querySelectorAll('[data-sv]').forEach(x=>x.onclick=()=>{const h=hist[+x.dataset.sv];const d=sel||{blocks:(()=>{const a=getAnchor();return [{b:a?a.b:0,s:0,e:Math.min(40,(htmlBody(R.content[R.c]).children[a?a.b:0]||{textContent:''}).textContent.length)}]})(),text:passage0.slice(0,120)};addAnn(d,'h',0,'AI - '+(h.label||h.q)+'\n'+h.a);toast('Salvata come nota')})};
+      log.querySelectorAll('[data-sv]').forEach(x=>x.onclick=()=>{const h=hist[+x.dataset.sv];const d=sel||{c:cc,blocks:(()=>{const a=getAnchor();return [{b:a?a.b:0,s:0,e:Math.min(40,(htmlBody(R.content[cc]).children[a?a.b:0]||{textContent:''}).textContent.length)}]})(),text:passage0.slice(0,120)};addAnn(d,'h',0,'AI - '+(h.label||h.q)+'\n'+h.a);toast('Salvata come nota')})};
     const send=async(q,label,passage)=>{
       q=q.trim();if(!q)return;const btn=$('#ai-send',box);btn.disabled=true;
       const wait=document.createElement('div');wait.innerHTML='<span class="spin"></span> Sto cercando…';log.appendChild(wait);wait.scrollIntoView({block:'nearest'});
@@ -784,9 +837,9 @@ function sentPieces(raw){
     if(t)out.push({off,text:t})}
   return out
 }
-function buildQueue(fromBlock){
-  const kids=[...document.querySelectorAll('#rtext > [data-i]')].filter(k=>+k.dataset.i>=fromBlock);
-  const pieces=[];kids.forEach(k=>sentPieces(k.textContent).forEach(p=>pieces.push({b:+k.dataset.i,off:p.off,text:p.text})));
+function buildQueue(c,fromBlock){
+  const kids=[...document.querySelectorAll('#rtext > [data-i]')].filter(k=>+k.dataset.c===c&&+k.dataset.i>=fromBlock);
+  const pieces=[];kids.forEach(k=>sentPieces(k.textContent).forEach(p=>pieces.push({c,b:+k.dataset.i,off:p.off,text:p.text})));
   return pieces.map(p=>({parts:[p],text:p.text}))
 }
 function itVoices(){try{return speechSynthesis.getVoices().filter(v=>/^it/i.test(v.lang)).map(v=>({v,sc:(/natural|neural|online|network/i.test(v.name+v.voiceURI)?2:0)+(/google/i.test(v.name)?1:0)+(v.localService?0:1)})).sort((a,b)=>b.sc-a.sc).map(x=>x.v)}catch(e){return[]}}
@@ -794,8 +847,8 @@ function pickVoice(){const l=itVoices();return l.find(v=>v.voiceURI===S.tts.voic
 /* parola evidenziata */
 function textPos(el,off){const w=document.createTreeWalker(el,NodeFilter.SHOW_TEXT);let n,pos=0,last=null;while((n=w.nextNode())){const l=n.nodeValue.length;if(off<=pos+l)return [n,off-pos];pos+=l;last=n}return last?[last,last.nodeValue.length]:null}
 function clearHl(){const h=$('#hlw');if(h)h.innerHTML='';try{CSS.highlights&&CSS.highlights.delete('tts')}catch(e){}}
-function hlWord(b,off,scroll){
-  const el=document.querySelector('#rtext > [data-i="'+b+'"]');if(!el)return;
+function hlWord(c,b,off,scroll){
+  const el=blkEl(c,b);if(!el)return;
   const t=el.textContent;if(off>=t.length)off=Math.max(0,t.length-1);
   let s0=off,e0=off;while(s0>0&&!/\s/.test(t[s0-1]))s0--;while(e0<t.length&&!/\s/.test(t[e0]))e0++;
   if(e0<=s0)return;const p1=textPos(el,s0),p2=textPos(el,e0);if(!p1||!p2)return;
@@ -810,16 +863,16 @@ function hlWord(b,off,scroll){
 }
 function wcum(ch){if(ch.cum)return ch.cum;const t=ch.text,c=new Float32Array(t.length);let a=0;for(let i=0;i<t.length;i++){const x=t[i];a+=1+(/[.!?]/.test(x)?10:/[;:]/.test(x)?6:x===','?3:x==='\n'?12:0);c[i]=a}return ch.cum=c}
 function posAtW(ch,w){const c=wcum(ch);let lo=0,hi=c.length-1;while(lo<hi){const m=(lo+hi)>>1;if(c[m]>=w)hi=m;else lo=m+1}return lo}
-function posToBlock(ch,pc){let part=ch.parts[0];for(const p of ch.parts){if((p.cum||0)<=pc)part=p;else break}return {b:part.b,off:part.off+Math.max(0,pc-(part.cum||0))}}
+function posToBlock(ch,pc){let part=ch.parts[0];for(const p of ch.parts){if((p.cum||0)<=pc)part=p;else break}return {c:part.c,b:part.b,off:part.off+Math.max(0,pc-(part.cum||0))}}
 function listenMark(ch,pc,scroll){
-  const x=posToBlock(ch,pc);hlWord(x.b,x.off,scroll!==false);
-  if(R.b&&x.b!=null){const s=BK(R.id);s.pos={c:R.c,b:x.b,off:20};const w=R.b.chapters[R.c].w0+(R.bw[x.b]||0);commitProgress(w);S.sess={view:curView,rd:true,id:R.id};save()}
+  const x=posToBlock(ch,pc);hlWord(x.c,x.b,x.off,scroll!==false);
+  if(R.b&&x.b!=null){const s=BK(R.id);s.pos={c:x.c,b:x.b,off:20};const w=R.b.chapters[x.c].w0+((R.bws[x.c]||[])[x.b]||0);commitProgress(w);S.sess={view:curView,rd:true,id:R.id};save()}
 }
 /* sessione multimediale (schermata di blocco, notifiche, Always On Display) */
 function silentWav(){const n=8000,b=new Uint8Array(44+n),dv=new DataView(b.buffer);const w=(o,s)=>[...s].forEach((c,i)=>b[o+i]=c.charCodeAt(0));w(0,'RIFF');dv.setUint32(4,36+n,true);w(8,'WAVEfmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);dv.setUint32(24,8000,true);dv.setUint32(28,8000,true);dv.setUint16(32,1,true);dv.setUint16(34,8,true);w(36,'data');dv.setUint32(40,n,true);b.fill(128,44);return new Blob([b],{type:'audio/wav'})}
 function mediaMeta(){
   if(!('mediaSession' in navigator)||!R.b)return;
-  try{navigator.mediaSession.metadata=new MediaMetadata({title:R.b.title,artist:R.b.author||'Ebook 1000',album:R.b.chapters[R.c].t,artwork:[{src:R.b.cover||new URL('icon-512.png',location.href).href,sizes:'512x512'}]})}catch(e){}
+  try{navigator.mediaSession.metadata=new MediaMetadata({title:R.b.title,artist:R.b.author||'Ebook 1000',album:R.b.chapters[LS.on&&LS.c!=null?LS.c:R.c].t,artwork:[{src:R.b.cover||new URL('icon-512.png',location.href).href,sizes:'512x512'}]})}catch(e){}
 }
 function mediaState(){if('mediaSession' in navigator)try{navigator.mediaSession.playbackState=!LS.on?'none':LS.paused?'paused':'playing'}catch(e){}}
 function mediaInit(){
@@ -854,17 +907,19 @@ $('#lp-set').onclick=()=>{buzz();listenSheet()};
 /* avvio e coda */
 function startListen(){
   if(!('speechSynthesis' in window)){toast('Sintesi vocale non disponibile');return false}
-  stopAudio();const a=getAnchor();const q=buildQueue(a?a.b:0);
+  stopAudio();const a=getAnchor();const lc=a?a.c:R.c;const q=buildQueue(lc,a?a.b:0);
   if(!q.length){toast('Niente da leggere qui');return false}
-  LS={on:true,q,i:0,paused:false,gen:(LS.gen||0)+1};mediaInit();mediaMeta();keepAlive(true);mediaState();lpUpdate();speechNext();return true
+  LS={on:true,q,i:0,paused:false,gen:(LS.gen||0)+1,c:lc};mediaInit();mediaMeta();keepAlive(true);mediaState();lpUpdate();speechNext();return true
 }
 function listen(){if(LS.on)return listenSheet();startListen()}
 function stopAudio(){try{speechSynthesis.cancel()}catch(e){}clearInterval(estT)}
 function stopListen(){LS.on=false;LS.gen++;stopAudio();keepAlive(false);clearHl();mediaState();lpUpdate()}
 async function nextChapterListen(){
-  if(R.c>=R.b.chapters.length-1){stopListen();toast('Fine del libro');return}
-  savePos();drawChapter(R.c+1);$('#rscroll').scrollTop=0;showPage(0);
-  const q=buildQueue(0);if(!q.length){return nextChapterListen()}
+  const c=(LS.c!=null?LS.c:R.c)+1;
+  if(c>R.b.chapters.length-1){stopListen();toast('Fine del libro');return}
+  savePos();LS.c=c;
+  if(S.set.mode==='pages'){drawChapter(c);$('#rscroll').scrollTop=0;showPage(0)}else ensureCh(c);
+  const q=buildQueue(c,0);if(!q.length){return nextChapterListen()}
   LS.q=q;LS.i=0;LS.gen++;mediaMeta();speechNext()
 }
 async function speechNext(){
