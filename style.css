@@ -180,3 +180,4 @@ input[type=number],input[type=date]{background:var(--bg);border:1px solid var(--
 #reader.immersive .rstat{padding-top:2px;padding-bottom:2px}
 #reader.immersive .pill{padding:2px 14px;font-size:13px}
 #reader.immersive .topprog{top:0}
+.rstat{padding-left:max(30px,env(safe-area-inset-left,0))!important;padding-right:max(30px,env(safe-area-inset-right,0))!important}
