@@ -1,6 +1,6 @@
 "use strict";
-const VERSION='1.13';
-const NEWS={"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.14';
+const NEWS={"1.14":["Il timer in alto conta tutta la lettura della giornata, anche se esci dal libro o ne apri un altro"],"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -445,7 +445,7 @@ setInterval(()=>{
   clockNow();
   const listening=LS.on&&!LS.paused,counting=!document.hidden&&(listening||Date.now()-RT.act<90000);
   if(counting){RT.sess++;const t=todayISO();S.time=S.time||{};S.time[t]=(S.time[t]||0)+1;if(++RT.tick%15===0)save()}
-  $('#rs-t').textContent=fmtClock(RT.sess);$('#rs-t').classList.toggle('idle',!counting)
+  $('#rs-t').textContent=fmtClock(todaySec());$('#rs-t').classList.toggle('idle',!counting)
 },1000);
 const inFs=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
 function setFs(on){
@@ -470,7 +470,7 @@ async function openBook(id,loc){
   const s=BK(id);s.opened=Date.now();S.last=id;ensureDay(id);
   const p=loc||s.pos||{c:0,b:0,off:0};
   const c=Math.max(0,Math.min(p.c||0,R.content.length-1));
-  const was=$('#reader').classList.contains('open');if(!was)RT.sess=0;RT.act=Date.now();clockNow();$('#rs-t').textContent=fmtClock(RT.sess);
+  const was=$('#reader').classList.contains('open');if(!was)RT.sess=0;RT.act=Date.now();clockNow();$('#rs-t').textContent=fmtClock(todaySec());
   $('#reader').classList.add('open');$('#reader').classList.remove('immersive');applyFmt();drawChapter(c);hideSel();hideBanner();
   if(!was)history.pushState({r:1},'');
   const fix=()=>restoreAnchor({c,b:p.b||0,off:p.off||0});
