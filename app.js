@@ -1,15 +1,15 @@
 "use strict";
-const VERSION='1.11';
-const NEWS={"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.12';
+const NEWS={"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
- 'Literata':'Literata,Georgia,serif','Lora':'Lora,Georgia,serif','Source Serif':'"Source Serif 4",Georgia,serif',
+ 'Literata':'Literata,Georgia,serif','Baskerville':'"Libre Baskerville",Baskerville,"Baskerville Old Face",Georgia,serif','Lora':'Lora,Georgia,serif','Source Serif':'"Source Serif 4",Georgia,serif',
  'Georgia':'Georgia,"Times New Roman",serif','Palatino':'"Palatino Linotype",Palatino,"Book Antiqua",serif',
  'Atkinson':'"Atkinson Hyperlegible",system-ui,sans-serif','Sans':'system-ui,-apple-system,Roboto,sans-serif','Mono':'ui-monospace,Menlo,Consolas,monospace'
 };
 const DEF={fam:'Literata',fs:19,lh:1.55,ps:.5,fw:400,ta:'justify',hy:true,ti:0,mt:8,mb:24,ml:4,mr:4,theme:'navy',mode:'scroll',rate:1,pin:false,bar:'day'};
-let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
+let S={set:{...DEF},profiles:{},key:'',model:'claude-haiku-5-5',web:true,wpm:200,wpp:250,bk:{},log:{},time:{},words:[],goalMin:20,known:{},filter:'all',sort:'recent',view:'grid',last:null,sess:null,
   tts:{engine:'device',voice:'',wps:17},seenV:null};
 try{const r=localStorage.getItem(SKEY);if(r){const o=JSON.parse(r);S={...S,...o,set:{...DEF,...(o.set||{})},tts:{...S.tts,...(o.tts||{}),engine:'device'}};['okey','gkey','ovoice','omodel','gvoice','gmodel'].forEach(k=>delete S.tts[k])}}catch(e){}
 let st=null;function save(){clearTimeout(st);st=setTimeout(()=>{try{localStorage.setItem(SKEY,JSON.stringify(S))}catch(e){}cloudSoon()},250)}
@@ -50,8 +50,32 @@ function commitProgress(w){
   if(s.w>s.max){const inc=s.w-s.max;if(inc<=2500&&s.w-prev<=2500){const t=todayISO();S.log[t]=S.log[t]||{};S.log[t][R.id]=(S.log[t][R.id]||0)+inc}s.max=s.w}
   if(!s.done&&s.w>=b.words*.985){s.done=true;toast('Libro finito')}
 }
-function streak(){let n=0,d=todayISO();const tot=x=>Object.values(S.log[x]||{}).reduce((a,b)=>a+b,0);if(tot(d)<50)d=addDays(d,-1);while(tot(d)>=50){n++;d=addDays(d,-1)}return n}
-const todayWords=()=>Object.values(S.log[todayISO()]||{}).reduce((a,b)=>a+b,0);
+const secOf=d=>(S.time&&S.time[d])||0;
+const wordsOf=d=>Object.values(S.log[d]||{}).reduce((a,b)=>a+b,0);
+const dayRead=d=>secOf(d)>=120||wordsOf(d)>=50;
+function streak(){let n=0,d=todayISO();if(!dayRead(d))d=addDays(d,-1);while(dayRead(d)){n++;d=addDays(d,-1)}return n}
+function bestStreak(){const ks=[...new Set([...Object.keys(S.time||{}),...Object.keys(S.log||{})])].filter(dayRead).sort();let b=0,c=0,p=null;ks.forEach(d=>{c=p&&dayDiff(p,d)===1?c+1:1;if(c>b)b=c;p=d});return b}
+const totalSec=()=>Object.values(S.time||{}).reduce((a,b)=>a+b,0);
+const todayWords=()=>wordsOf(todayISO());
+const todaySec=()=>secOf(todayISO());
+const fmtHM=s=>s>=3600?(s/3600).toFixed(1).replace('.',',')+' h':Math.round(s/60)+' min';
+function statsBand(){
+  const g=Math.max(1,S.goalMin||20),f=Math.min(1,todaySec()/(g*60)),m=Math.floor(todaySec()/60);
+  return '<button class="card stack statband" id="stband" style="text-align:left"><div class="stat"><div><b class="tab">'+m+'</b><span class="small mute">min oggi</span></div><div><b class="tab">'+streak()+'</b><span class="small mute">giorni di fila</span></div><div><b class="tab">'+fmtHM(totalSec())+'</b><span class="small mute">in totale</span></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">'+(f>=1?'Obiettivo di oggi raggiunto':'Obiettivo '+g+' min · mancano '+Math.max(1,Math.ceil(g-todaySec()/60))+' min')+'</div></button>'
+}
+function statsSheet(){
+  const days=[];for(let i=6;i>=0;i--){const d=addDays(todayISO(),-i);days.push({d,s:secOf(d)})}
+  const mx=Math.max(600,...days.map(x=>x.s)),wk=days.reduce((s,x)=>s+x.s,0);
+  const wd=d=>new Date(d+'T12:00').toLocaleDateString('it-IT',{weekday:'short'}).replace('.','');
+  const cell=(n,l)=>'<div><b class="tab" style="display:block;font-size:22px;font-family:var(--disp)">'+n+'</b><span class="small mute">'+l+'</span></div>';
+  sheet('<div class="hd"><h3>Statistiche di lettura</h3><button class="btn sec sm" data-x>Chiudi</button></div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+cell(fmtHM(todaySec())||'0 min','oggi')+cell(streak(),'giorni di fila')+cell(bestStreak(),'record di giorni')+cell(fmtHM(wk),'ultimi 7 giorni')+cell(fmtHM(totalSec()),'in totale')+cell((S.words||[]).length,'parole imparate')+'</div>'
+   +'<div style="display:flex;gap:8px;align-items:flex-end;height:110px;margin-top:6px">'+days.map(x=>'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><div style="width:100%;border-radius:6px;background:'+(x.s>=(S.goalMin||20)*60?'var(--ok)':'var(--acc)')+';height:'+Math.max(3,Math.round(x.s/mx*80))+'px;opacity:'+(x.s?1:.25)+'"></div><span class="small mute">'+wd(x.d)+'</span></div>').join('')+'</div>'
+   +'<div class="field"><div class="row"><label for="g-min" class="grow">Obiettivo giornaliero (minuti)</label><span class="small mute tab" id="g-v">'+(S.goalMin||20)+'</span></div><input id="g-min" type="range" min="5" max="180" step="5" value="'+(S.goalMin||20)+'"></div>'
+   +'<div class="small mute">Il tempo conta solo con il lettore aperto e lo schermo acceso, e si ferma dopo un minuto e mezzo senza tocchi né scorrimenti. Un giorno vale come letto da 2 minuti in su.</div>',box=>{
+    $('#g-min',box).oninput=e=>{S.goalMin=+e.target.value;$('#g-v',box).textContent=S.goalMin;save()}})
+}
+document.addEventListener('click',e=>{if(e.target.closest('#stband'))statsSheet()});
 
 /* ================= navigazione, schede e gesture indietro ================= */
 let curView='lib',popCb=null;
@@ -93,6 +117,7 @@ const coverHtml=(b,cls)=>'<div class="cover'+(cls?' '+cls:'')+'" style="--h:'+hu
 function rLib(){
   const v=$('#v-lib');
   let h='<div class="wrap stack"><div class="row"><h1 class="grow">Libreria</h1><button class="btn sm" id="add">+ Aggiungi</button></div>';
+  h+=statsBand();
   if(!LIB.length){
     h+='<div class="empty stack"><h2>Nessun libro</h2><div class="mute">Aggiungi un file EPUB, PDF, Word (.docx), TXT o HTML. Resta sul telefono e lo leggi anche offline.</div><button class="btn" id="add2">Aggiungi il primo libro</button></div>';
   }else{
@@ -212,7 +237,7 @@ function rOggi(){
   const plans=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p);
   let h='<div class="wrap stack"><div><div class="eyebrow">'+new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})+'</div><h1>Oggi</h1></div>';
   const tw=todayWords();
-  h+='<div class="card stack"><div class="stat"><div><b class="tab">'+Math.round(tw/Math.max(1,S.wpm))+'</b><span class="small mute">minuti letti</span></div><div><b class="tab">'+streak()+'</b><span class="small mute">giorni di fila</span></div><div><b class="tab">'+LIB.filter(b=>statusOf(b)==='done').length+'</b><span class="small mute">libri letti</span></div></div></div>';
+  h+=statsBand();
   if(!plans.length)h+='<div class="empty stack"><div class="mute">Nessun obiettivo attivo. Apri un libro dalla libreria e imposta in quanti giorni o settimane vuoi finirlo: qui vedrai quante pagine leggere ogni giorno.</div></div>';
   plans.forEach(({b,p})=>{
     const f=p.pctDay;
@@ -260,6 +285,7 @@ function rAltro(){
   const missing=Object.keys(S.known).filter(id=>!bookById(id));
   v.innerHTML='<div class="wrap stack"><h1>Altro</h1>'
   +'<div class="list cards">'+Object.keys(kindOf).map(k=>'<button class="item rowc" data-l="'+k+'"><span class="grow">'+kindOf[k]+'</span><span class="mute tab">'+annCount(k)+'</span></button>').join('')+'</div>'
+  +'<div class="list cards"><button class="item rowc" id="o-stats"><span class="grow">Statistiche di lettura</span><span class="mute tab">'+streak()+' giorni di fila</span></button><button class="item rowc" id="o-words"><span class="grow">Parole da imparare</span><span class="mute tab">'+(S.words||[]).length+'</span></button></div>'
   +(missing.length?'<div class="card stack"><h3>Libri da riaggiungere ('+missing.length+')</h3><div class="small mute">I tuoi dati li riguardano ma il file non è su questo telefono. Aggiungi lo stesso file e ritrovi note e progressi.</div>'+missing.map(id=>'<div class="small">· '+esc(S.known[id].title||id)+(S.known[id].author?' - '+esc(S.known[id].author):'')+'</div>').join('')+'<button class="btn sec sm" id="m-add">Aggiungi file</button></div>':'')
   +'<h2>Impostazioni</h2>'
   +'<div class="card stack"><h3>Intelligenza artificiale</h3><div class="field"><label for="k">Chiave API Claude</label><input id="k" type="password" autocomplete="off" class="input" value="'+esc(S.key)+'"></div><div class="field"><label for="m">Modello</label><input id="m" class="input" type="text" value="'+esc(S.model)+'"></div><label class="row"><span class="grow">Cerca sul web nelle spiegazioni</span><input type="checkbox" id="w"'+(S.web?' checked':'')+'></label><div class="small mute">La chiave resta solo su questo dispositivo.</div></div>'
@@ -270,6 +296,7 @@ function rAltro(){
   +'<div class="card stack"><h3>Spazio</h3><div class="small mute" id="stg">Calcolo…</div></div>'
   +'<div class="small mute">I libri restano sul telefono. Nessun file viene inviato a nessuno, salvo i brani che chiedi di spiegare all’AI.</div></div>';
   v.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>openLib(b.dataset.l));
+  $('#o-stats',v).onclick=statsSheet;$('#o-words',v).onclick=wordsSheet;
   const ma=$('#m-add',v);if(ma)ma.onclick=()=>$('#fpick').click();
   $('#k').onchange=e=>{S.key=e.target.value.trim();save()};$('#m').onchange=e=>{S.model=e.target.value.trim()||'claude-haiku-5-5';save()};$('#w').onchange=e=>{S.web=e.target.checked;save()};
   $('#wpm').oninput=e=>{S.wpm=+e.target.value;$('#wpmv').textContent=S.wpm;save()};$('#wpp').oninput=e=>{S.wpp=+e.target.value;$('#wppv').textContent=S.wpp;save()};
@@ -296,6 +323,71 @@ function openLib(kind){
   sheet(h,box=>box.querySelectorAll('[data-o]').forEach(e=>e.onclick=()=>closeSheet(()=>openBook(e.dataset.o,{c:+e.dataset.c,b:+e.dataset.b,off:30}))))
 }
 
+/* ================= parole da imparare ================= */
+const WINT=[1,3,7,16,35,90];
+function sentenceAround(d){
+  try{const bl=d.blocks[0],el=htmlBody(R.content[R.c]).children[bl.b];if(!el)return '';const t=el.textContent;
+    let x=0;for(let i=bl.s-1;i>=0;i--){if('.!?…'.includes(t[i])){x=i+1;break}}
+    let z=t.length;for(let i=bl.e;i<t.length;i++){if('.!?…'.includes(t[i])){z=i+1;break}}
+    return t.slice(x,z).replace(/\s+/g,' ').trim().slice(0,320)
+  }catch(e){return ''}
+}
+function askMeaning(w,ctx,box){
+  const st=$('#wd-st',box);st.textContent='Cerco il significato…';
+  askClaude([{role:'user',content:'Spiega in italiano, in una o due righe, il significato di «'+w+'»'+(ctx?' nel contesto di questa frase: «'+ctx+'»':'')+'. Se non sei sicuro del significato, dillo. Rispondi solo con il significato.'}],{max:300}).then(t=>{$('#wd-m',box).value=t;st.textContent=''}).catch(e=>{st.textContent=e.message})
+}
+function wordSheet(d){
+  const w0=d.text.length>60?d.text.slice(0,60):d.text,ctx=sentenceAround(d);
+  sheet('<div class="hd"><h3>Parola da imparare</h3><button class="btn sec sm" data-x>Chiudi</button></div>'
+   +'<div class="field"><label for="wd-w">Parola o espressione</label><input class="input" id="wd-w" value="'+esc(w0)+'"></div>'
+   +(ctx?'<div class="small" style="border-left:3px solid var(--line);padding-left:8px;color:var(--mute)">'+esc(ctx)+'</div>':'')
+   +'<div class="field"><label for="wd-m">Significato</label><textarea id="wd-m" placeholder="Scrivilo tu oppure chiedilo all’AI"></textarea></div>'
+   +'<div class="row wrap"><button class="btn sec" id="wd-ai">Chiedi all’AI</button><button class="btn grow" id="wd-s">Salva</button></div><div class="small mute" id="wd-st"></div>',box=>{
+    $('#wd-ai',box).onclick=()=>{const w=$('#wd-w',box).value.trim();if(!w)return toast('Scrivi la parola');askMeaning(w,ctx,box)};
+    $('#wd-s',box).onclick=()=>{const w=$('#wd-w',box).value.trim();if(!w)return toast('Scrivi la parola');const m=$('#wd-m',box).value.trim();
+      S.words=S.words||[];const ex=S.words.find(x=>norm(x.w)===norm(w));
+      if(ex){if(m)ex.mean=m;if(!ex.ctx)ex.ctx=ctx;ex.ts=Date.now()}
+      else S.words.push({id:'w'+Date.now().toString(36)+Math.random().toString(36).slice(2,4),w,ctx,mean:m,bid:R.id,book:R.b.title,ts:Date.now(),n:0,next:Date.now()});
+      save();closeSheet(()=>{endSel();toast('Parola salvata')})}})
+}
+function wordEdit(id){
+  const x=(S.words||[]).find(y=>y.id===id);if(!x)return;
+  sheet('<div class="hd"><h3>Parola</h3><button class="btn sec sm" data-x>Chiudi</button></div>'
+   +'<div class="field"><label for="wd-w">Parola o espressione</label><input class="input" id="wd-w" value="'+esc(x.w)+'"></div>'
+   +(x.ctx?'<div class="small" style="border-left:3px solid var(--line);padding-left:8px;color:var(--mute)">'+esc(x.ctx)+'</div>':'')
+   +(x.book?'<div class="small mute">'+esc(x.book)+'</div>':'')
+   +'<div class="field"><label for="wd-m">Significato</label><textarea id="wd-m">'+esc(x.mean||'')+'</textarea></div>'
+   +'<div class="row wrap"><button class="btn sec" id="wd-ai">Chiedi all’AI</button><button class="btn grow" id="wd-s">Salva</button><button class="btn sec" id="wd-d" style="color:var(--warn);border-color:var(--warn)">Elimina</button></div><div class="small mute" id="wd-st"></div>',box=>{
+    $('#wd-ai',box).onclick=()=>{const w=$('#wd-w',box).value.trim();if(!w)return toast('Scrivi la parola');askMeaning(w,x.ctx,box)};
+    $('#wd-s',box).onclick=()=>{const w=$('#wd-w',box).value.trim();if(!w)return toast('Scrivi la parola');x.w=w;x.mean=$('#wd-m',box).value.trim();x.ts=Date.now();save();closeSheet(()=>wordsSheet())};
+    $('#wd-d',box).onclick=()=>{S.words=S.words.filter(y=>y.id!==id);save();closeSheet(()=>wordsSheet())}})
+}
+function reviewSheet(){
+  const due=(S.words||[]).filter(x=>(x.next||0)<=Date.now()).sort((p,q)=>(p.next||0)-(q.next||0));
+  if(!due.length){toast('Niente da ripassare adesso');return}
+  let i=0;
+  sheet('<div class="hd"><h3>Ripasso</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="stack" id="rv"></div>',box=>{
+    const rv=$('#rv',box);
+    const front=x=>'<div class="small mute tab">'+(i+1)+' di '+due.length+'</div><div style="font-family:var(--disp);font-size:24px;font-weight:600">'+esc(x.w)+'</div>'+(x.ctx?'<div class="small" style="color:var(--mute);font-style:italic">'+esc(x.ctx)+'</div>':'');
+    const show=()=>{
+      if(i>=due.length){rv.innerHTML='<div class="mute">Ripasso finito. Alla prossima.</div>';return}
+      const x=due[i];rv.innerHTML=front(x)+'<button class="btn" id="rv-s">Mostra il significato</button>';
+      $('#rv-s',rv).onclick=()=>{rv.innerHTML=front(x)+'<div class="ai">'+esc(x.mean||'Significato non inserito')+'</div><div class="row"><button class="btn sec grow" id="rv-no">Ancora no</button><button class="btn grow" id="rv-ok">La so</button></div>';
+        $('#rv-ok',rv).onclick=()=>{x.n=(x.n||0)+1;x.next=Date.now()+WINT[Math.min(x.n-1,WINT.length-1)]*864e5;save();i++;show()};
+        $('#rv-no',rv).onclick=()=>{x.n=0;x.next=Date.now()+10*60*1000;save();i++;show()}}
+    };show()})
+}
+function wordsSheet(){
+  const L=(S.words||[]).slice().sort((p,q)=>(q.ts||0)-(p.ts||0)),due=L.filter(x=>(x.next||0)<=Date.now()).length;
+  sheet('<div class="hd"><h3>Parole da imparare ('+L.length+')</h3><button class="btn sec sm" data-x>Chiudi</button></div>'
+   +(L.length?'<button class="btn" id="w-rv">Ripasso'+(due?' ('+due+')':'')+'</button><input class="input" id="w-q" type="search" placeholder="Cerca">':'<div class="mute">Ancora nessuna parola. Nel lettore seleziona una parola e tocca Parola.</div>')
+   +'<div class="stack" id="w-l"></div>',box=>{
+    const draw=()=>{const q=L.length?norm($('#w-q',box).value.trim()):'';
+      $('#w-l',box).innerHTML=L.filter(x=>!q||norm(x.w+' '+(x.mean||'')).includes(q)).map(x=>'<button class="stack hl-it c0" data-w="'+x.id+'" style="text-align:left;padding-bottom:8px"><span class="small" style="color:var(--acc);font-weight:600">'+esc(x.w)+'</span><span class="small">'+esc(x.mean||'Significato da inserire')+'</span>'+(x.ctx?'<span class="small mute" style="font-style:italic">'+esc(x.ctx.slice(0,160))+'</span>':'')+'</button>').join('');
+      $('#w-l',box).querySelectorAll('[data-w]').forEach(e=>e.onclick=()=>closeSheet(()=>wordEdit(e.dataset.w)))};
+    draw();if(L.length){$('#w-q',box).oninput=draw;$('#w-rv',box).onclick=()=>closeSheet(()=>reviewSheet())}})
+}
+
 /* ================= copia di sicurezza ================= */
 function dataObj(withKeys){
   const copy=JSON.parse(JSON.stringify({...S,sess:null}));if(!withKeys){copy.key=''}
@@ -311,9 +403,12 @@ async function exportZip(){
 }
 function mergeData(o){
   if(!o||o.app!=='leggo'||!o.S)throw new Error('File non valido');
-  const key=S.key,keep=S.bk;
+  const key=S.key,keep=S.bk,keepT={...(S.time||{})},keepW=[...(S.words||[])];
   const bk={...keep};Object.keys(o.S.bk||{}).forEach(id=>{if(!keep[id]||(o.S.bk[id].opened||0)>=(keep[id].opened||0))bk[id]=o.S.bk[id]});
   S={...S,...o.S,bk,set:{...DEF,...(o.S.set||{})},tts:{...S.tts,...(o.S.tts||{})},known:{...S.known,...(o.S.known||{})},log:{...(o.S.log||{}),...S.log},sess:null};
+  const tm={...(o.S.time||{})};Object.keys(keepT).forEach(d=>{tm[d]=Math.max(tm[d]||0,keepT[d])});S.time=tm;
+  const wm=new Map();[...(o.S.words||[]),...keepW].forEach(x=>{const k=norm(x.w),p=wm.get(k);if(!p||(x.ts||0)>(p.ts||0)||((x.ts||0)===(p.ts||0)&&(x.n||0)>(p.n||0)))wm.set(k,x)});S.words=[...wm.values()];
+  if(!S.goalMin)S.goalMin=20;
   (o.books||[]).forEach(b=>{S.known[b.id]={title:b.title,author:b.author,ext:b.ext}});
   if(!o.S.key)S.key=key;save();applyTheme()
 }
@@ -339,6 +434,28 @@ function importSheet(){
 
 /* ================= lettore ================= */
 const R={id:null,b:null,content:null,c:0,bw:[],cw:0,sel:null,pages:1,page:0,seekDrag:false,back:null,pgNow:0,idx:null};
+/* ---------- timer di lettura, orologio, schermo intero ---------- */
+const RT={sess:0,act:Date.now(),tick:0};
+const fmtClock=s=>{const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')};
+['pointerdown','touchmove','keydown'].forEach(ev=>document.addEventListener(ev,()=>{RT.act=Date.now()},{passive:true,capture:true}));
+document.addEventListener('scroll',()=>{RT.act=Date.now()},{passive:true,capture:true});
+function clockNow(){const n=new Date();$('#rs-c').textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')}
+setInterval(()=>{
+  if(!$('#reader').classList.contains('open'))return;
+  clockNow();
+  const listening=LS.on&&!LS.paused,counting=!document.hidden&&(listening||Date.now()-RT.act<90000);
+  if(counting){RT.sess++;const t=todayISO();S.time=S.time||{};S.time[t]=(S.time[t]||0)+1;if(++RT.tick%15===0)save()}
+  $('#rs-t').textContent=fmtClock(RT.sess);$('#rs-t').classList.toggle('idle',!counting)
+},1000);
+const inFs=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
+function setFs(on){
+  try{const el=document.documentElement;
+    if(on&&!inFs()){const p=el.requestFullscreen||el.webkitRequestFullscreen;if(p){const r=p.call(el,{navigationUI:'hide'});if(r&&r.catch)r.catch(()=>{})}}
+    else if(!on&&inFs()){const x=document.exitFullscreen||document.webkitExitFullscreen;if(x){const r=x.call(document);if(r&&r.catch)r.catch(()=>{})}}
+  }catch(e){}
+}
+function toggleImmersive(){const r=$('#reader'),on=!r.classList.contains('immersive');r.classList.toggle('immersive',on);setFs(on);setTimeout(()=>{if(S.set.mode==='pages')layoutPages()},230)}
+document.addEventListener('fullscreenchange',()=>{if(!inFs()&&$('#reader').classList.contains('immersive')){$('#reader').classList.remove('immersive');setTimeout(()=>{if(S.set.mode==='pages')layoutPages()},230)}});
 function applyFmt(){
   const s=S.set,t=$('#rtext').style;
   t.setProperty('--rf',FONTS[s.fam]||FONTS.Georgia);t.setProperty('--fs',s.fs+'px');t.setProperty('--lh',s.lh);t.setProperty('--ps',s.ps+'em');t.setProperty('--fw',s.fw);
@@ -353,13 +470,13 @@ async function openBook(id,loc){
   const s=BK(id);s.opened=Date.now();S.last=id;ensureDay(id);
   const p=loc||s.pos||{c:0,b:0,off:0};
   const c=Math.max(0,Math.min(p.c||0,R.content.length-1));
-  const was=$('#reader').classList.contains('open');
+  const was=$('#reader').classList.contains('open');if(!was)RT.sess=0;RT.act=Date.now();clockNow();$('#rs-t').textContent=fmtClock(RT.sess);
   $('#reader').classList.add('open');$('#reader').classList.remove('immersive');applyFmt();drawChapter(c);hideSel();hideBanner();
   if(!was)history.pushState({r:1},'');
   const fix=()=>restoreAnchor({c,b:p.b||0,off:p.off||0});
   setTimeout(fix,60);return fix
 }
-function closeReader(){stopListen();savePos();$('#reader').classList.remove('open');S.sess={view:curView,rd:false};save();hideSel();hideBanner();go(curView)}
+function closeReader(){stopListen();savePos();setFs(false);$('#reader').classList.remove('open','immersive');S.sess={view:curView,rd:false};save();hideSel();hideBanner();go(curView)}
 $('#r-close').onclick=()=>{if(history.state&&history.state.r)history.back();else closeReader()};
 
 function annClass(a){return (a.k==='q'?'dif':a.col?'hl'+a.col:'')+(a.txt?' hasnote':'')}
@@ -485,7 +602,7 @@ $('#rscroll').addEventListener('click',e=>{
   const mk=e.target.closest('mark');if(mk){annSheet(mk.dataset.g);return}
   const w=$('#rscroll').clientWidth;
   if(S.set.mode==='pages'){const x=e.clientX;if(x<w*.22)return pageEdge(-1);if(x>w*.78)return pageEdge(1)}
-  $('#reader').classList.toggle('immersive');setTimeout(()=>{if(S.set.mode==='pages')layoutPages()},230)
+  toggleImmersive()
 });
 function pageEdge(d){if(d>0){if(R.page<R.pages-1)showPage(R.page+1);else chapterStep(1)}else{if(R.page>0)showPage(R.page-1);else chapterStep(-1)}}
 
@@ -522,6 +639,7 @@ document.querySelectorAll('#sb-sw button').forEach(b=>b.onclick=()=>{
   endSel();refresh()});
 $('#sb-x').onclick=()=>endSel();
 $('#sb-dif').onclick=()=>{if(!R.sel)return;clearAnn(R.sel,['q']);addAnn(R.sel,'q',0,'');endSel();refresh();toast('Segnato come da capire')};
+$('#sb-word').onclick=()=>{if(R.sel)wordSheet(R.sel)};
 $('#sb-bm').onclick=()=>{if(!R.sel)return;const b=R.sel.blocks[0].b;toggleBm(R.c,b);endSel();refresh()};
 $('#sb-copy').onclick=async()=>{if(!R.sel)return;try{await navigator.clipboard.writeText(R.sel.text+' ('+R.b.title+(R.b.author?', '+R.b.author:'')+')');toast('Copiato')}catch(e){toast('Copia non riuscita')}};
 $('#sb-note').onclick=()=>{if(!R.sel)return;const d=R.sel;sheet('<div class="hd"><h3>Nota</h3><button class="btn sec sm" data-x>Chiudi</button></div><div class="small mute">'+esc(d.text.slice(0,200))+'</div><div class="field"><textarea id="ne" placeholder="Il tuo appunto"></textarea></div><button class="btn" id="ns">Salva</button>',box=>{

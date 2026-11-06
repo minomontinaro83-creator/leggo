@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png"><link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,300;0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Atkinson+Hyperlegible:wght@400;700&family=Playfair+Display:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,300;0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&family=Atkinson+Hyperlegible:wght@400;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Playfair+Display:wght@500;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -27,6 +27,7 @@
 </div>
 
 <div id="reader" aria-label="Lettore">
+  <div class="rstat" id="rstat"><span class="pill" id="rs-t" aria-label="Tempo di lettura">0:00</span><span class="pill" id="rs-c" aria-label="Ora">--:--</span></div>
   <div class="topprog"><i id="r-tp"></i></div>
   <div class="rtop">
     <button class="ib" id="r-close" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m15 5-7 7 7 7"/></svg></button>
@@ -53,6 +54,7 @@
   <div class="acts">
     <button id="sb-ai"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18 16l.8 2.2L21 19l-2.2.8L18 22l-.8-2.2L15 19l2.2-.8z"/></svg>Spiega</button>
     <button id="sb-note"><svg viewBox="0 0 24 24"><path d="M5 4h14v12l-4 4H5zM15 20v-4h4M8 9h8M8 13h5"/></svg>Nota</button>
+    <button id="sb-word"><svg viewBox="0 0 24 24"><path d="M5 5h9a4 4 0 0 1 4 4v10H9a4 4 0 0 1-4-4zM9 9h5M9 13h5"/></svg>Parola</button>
     <button id="sb-bm"><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-4-5 4z"/></svg>Segnalibro</button>
     <button id="sb-dif"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17v.1"/></svg>Da capire</button>
     <button id="sb-copy"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg>Copia</button>
