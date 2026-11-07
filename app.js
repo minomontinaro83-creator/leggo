@@ -1,6 +1,6 @@
 "use strict";
-const VERSION='1.17';
-const NEWS={"1.17":["Lettura a scorrimento continuo: tutto il libro è un’unica pagina, passi da un capitolo all’altro scorrendo","Tolto il pulsante «Capitolo successivo»","Nuovo segnaposto animato e colorato a fine tappa giornaliera"],"1.16":["Timer e orario ancora un poco più verso il centro"],"1.15":["Timer e orario più spostati verso il centro, per non essere tagliati dagli angoli arrotondati del telefono"],"1.14":["Il timer in alto conta tutta la lettura della giornata, anche se esci dal libro o ne apri un altro"],"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
+const VERSION='1.18';
+const NEWS={"1.18":["Tolto il resoconto dei minuti dalla home e dalla libreria","Nelle statistiche: azzera il timer di oggi o tutti i conteggi"],"1.17":["Lettura a scorrimento continuo: tutto il libro è un’unica pagina, passi da un capitolo all’altro scorrendo","Tolto il pulsante «Capitolo successivo»","Nuovo segnaposto animato e colorato a fine tappa giornaliera"],"1.16":["Timer e orario ancora un poco più verso il centro"],"1.15":["Timer e orario più spostati verso il centro, per non essere tagliati dagli angoli arrotondati del telefono"],"1.14":["Il timer in alto conta tutta la lettura della giornata, anche se esci dal libro o ne apri un altro"],"1.13":["A schermo intero timer e orario salgono fino al bordo alto dello schermo, dove c’era la barra di Android"],"1.12":["Schermo intero che copre anche la barra di Android","In lettura, in alto a sinistra il timer e a destra l’orario","Statistiche di lettura (minuti di oggi, giorni di fila, totale) in home e in Altro, con obiettivo giornaliero","Parole da imparare: seleziona una parola e tocca Parola, poi ripassale da Altro. Salvate anche sul sito","Nuovo carattere Libre Baskerville"],"1.11":["Salvataggio automatico sul tuo sito (libri, progressi, impostazioni) e ripristino su un nuovo telefono"],"1.10":["Puntina rossa più grande per i libri fissati"],"1.9":["Libri preferiti: fissali in alto con la puntina dal menu del libro","Rimosse le voci AI (OpenAI e Gemini): resta solo la voce del telefono","Novità di ogni versione visibili in Altro e dopo l'aggiornamento"],"1.8":["Voce Gemini (rimossa nella 1.9)"],"1.7":["Evidenziazione parola più sincronizzata","Mini player di ascolto"]};
 /* ================= Leggo - stato ================= */
 const SKEY='leggo.v1';
 const FONTS={
@@ -63,6 +63,11 @@ function statsBand(){
   const g=Math.max(1,S.goalMin||20),f=Math.min(1,todaySec()/(g*60)),m=Math.floor(todaySec()/60);
   return '<button class="card stack statband" id="stband" style="text-align:left"><div class="stat"><div><b class="tab">'+m+'</b><span class="small mute">min oggi</span></div><div><b class="tab">'+streak()+'</b><span class="small mute">giorni di fila</span></div><div><b class="tab">'+fmtHM(totalSec())+'</b><span class="small mute">in totale</span></div></div><div class="bar"><i style="width:'+f*100+'%"></i></div><div class="small mute tab">'+(f>=1?'Obiettivo di oggi raggiunto':'Obiettivo '+g+' min · mancano '+Math.max(1,Math.ceil(g-todaySec()/60))+' min')+'</div></button>'
 }
+function resetTimer(all){
+  S.tReset=S.tReset||{all:0,days:{}};const now=Date.now();
+  if(all){S.time={};S.tReset.all=now;S.tReset.days={}}else{S.time=S.time||{};delete S.time[todayISO()];S.tReset.days[todayISO()]=now}
+  RT.sess=0;save();$('#rs-t').textContent=fmtClock(todaySec());toast(all?'Tutti i conteggi azzerati':'Timer di oggi azzerato')
+}
 function statsSheet(){
   const days=[];for(let i=6;i>=0;i--){const d=addDays(todayISO(),-i);days.push({d,s:secOf(d)})}
   const mx=Math.max(600,...days.map(x=>x.s)),wk=days.reduce((s,x)=>s+x.s,0);
@@ -72,8 +77,11 @@ function statsSheet(){
    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">'+cell(fmtHM(todaySec())||'0 min','oggi')+cell(streak(),'giorni di fila')+cell(bestStreak(),'record di giorni')+cell(fmtHM(wk),'ultimi 7 giorni')+cell(fmtHM(totalSec()),'in totale')+cell((S.words||[]).length,'parole imparate')+'</div>'
    +'<div style="display:flex;gap:8px;align-items:flex-end;height:110px;margin-top:6px">'+days.map(x=>'<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end"><div style="width:100%;border-radius:6px;background:'+(x.s>=(S.goalMin||20)*60?'var(--ok)':'var(--acc)')+';height:'+Math.max(3,Math.round(x.s/mx*80))+'px;opacity:'+(x.s?1:.25)+'"></div><span class="small mute">'+wd(x.d)+'</span></div>').join('')+'</div>'
    +'<div class="field"><div class="row"><label for="g-min" class="grow">Obiettivo giornaliero (minuti)</label><span class="small mute tab" id="g-v">'+(S.goalMin||20)+'</span></div><input id="g-min" type="range" min="5" max="180" step="5" value="'+(S.goalMin||20)+'"></div>'
+   +'<div class="row wrap"><button class="btn sec sm grow" id="z-day">Azzera timer di oggi</button><button class="btn sec sm grow" id="z-all" style="color:var(--warn);border-color:var(--warn)">Azzera tutti i conteggi</button></div>'
    +'<div class="small mute">Il tempo conta solo con il lettore aperto e lo schermo acceso, e si ferma dopo un minuto e mezzo senza tocchi né scorrimenti. Un giorno vale come letto da 2 minuti in su.</div>',box=>{
-    $('#g-min',box).oninput=e=>{S.goalMin=+e.target.value;$('#g-v',box).textContent=S.goalMin;save()}})
+    $('#g-min',box).oninput=e=>{S.goalMin=+e.target.value;$('#g-v',box).textContent=S.goalMin;save()}
+    const arm=(id,lbl,fn)=>{const b=$(id,box);let t=0;b.onclick=()=>{if(!t){b.textContent='Tocca ancora per confermare';t=setTimeout(()=>{b.textContent=lbl;t=0},4000);return}clearTimeout(t);fn();closeSheet(()=>statsSheet())}};
+    arm('#z-day','Azzera timer di oggi',resetTimer);arm('#z-all','Azzera tutti i conteggi',()=>resetTimer(true))})
 }
 document.addEventListener('click',e=>{if(e.target.closest('#stband'))statsSheet()});
 
@@ -117,7 +125,6 @@ const coverHtml=(b,cls)=>'<div class="cover'+(cls?' '+cls:'')+'" style="--h:'+hu
 function rLib(){
   const v=$('#v-lib');
   let h='<div class="wrap stack"><div class="row"><h1 class="grow">Libreria</h1><button class="btn sm" id="add">+ Aggiungi</button></div>';
-  h+=statsBand();
   if(!LIB.length){
     h+='<div class="empty stack"><h2>Nessun libro</h2><div class="mute">Aggiungi un file EPUB, PDF, Word (.docx), TXT o HTML. Resta sul telefono e lo leggi anche offline.</div><button class="btn" id="add2">Aggiungi il primo libro</button></div>';
   }else{
@@ -237,7 +244,6 @@ function rOggi(){
   const plans=LIB.map(b=>({b,p:planInfo(b)})).filter(x=>x.p);
   let h='<div class="wrap stack"><div><div class="eyebrow">'+new Date().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'})+'</div><h1>Oggi</h1></div>';
   const tw=todayWords();
-  h+=statsBand();
   if(!plans.length)h+='<div class="empty stack"><div class="mute">Nessun obiettivo attivo. Apri un libro dalla libreria e imposta in quanti giorni o settimane vuoi finirlo: qui vedrai quante pagine leggere ogni giorno.</div></div>';
   plans.forEach(({b,p})=>{
     const f=p.pctDay;
@@ -403,10 +409,13 @@ async function exportZip(){
 }
 function mergeData(o){
   if(!o||o.app!=='leggo'||!o.S)throw new Error('File non valido');
-  const key=S.key,keep=S.bk,keepT={...(S.time||{})},keepW=[...(S.words||[])];
+  const key=S.key,keep=S.bk,keepT={...(S.time||{})},keepW=[...(S.words||[])],rl=S.tReset||{};
   const bk={...keep};Object.keys(o.S.bk||{}).forEach(id=>{if(!keep[id]||(o.S.bk[id].opened||0)>=(keep[id].opened||0))bk[id]=o.S.bk[id]});
   S={...S,...o.S,bk,set:{...DEF,...(o.S.set||{})},tts:{...S.tts,...(o.S.tts||{})},known:{...S.known,...(o.S.known||{})},log:{...(o.S.log||{}),...S.log},sess:null};
-  const tm={...(o.S.time||{})};Object.keys(keepT).forEach(d=>{tm[d]=Math.max(tm[d]||0,keepT[d])});S.time=tm;
+  const rr=o.S.tReset||{},rm={all:Math.max(rl.all||0,rr.all||0),days:{...(rr.days||{})}};Object.keys(rl.days||{}).forEach(d=>{rm.days[d]=Math.max(rm.days[d]||0,rl.days[d])});
+  const alive=(d,r)=>!(rm.all>(r.all||0)||(rm.days[d]||0)>((r.days||{})[d]||0));
+  const tm={};Object.keys(o.S.time||{}).forEach(d=>{if(alive(d,rr))tm[d]=o.S.time[d]});
+  Object.keys(keepT).forEach(d=>{if(alive(d,rl))tm[d]=Math.max(tm[d]||0,keepT[d])});S.time=tm;S.tReset=rm;
   const wm=new Map();[...(o.S.words||[]),...keepW].forEach(x=>{const k=norm(x.w),p=wm.get(k);if(!p||(x.ts||0)>(p.ts||0)||((x.ts||0)===(p.ts||0)&&(x.n||0)>(p.n||0)))wm.set(k,x)});S.words=[...wm.values()];
   if(!S.goalMin)S.goalMin=20;
   (o.books||[]).forEach(b=>{S.known[b.id]={title:b.title,author:b.author,ext:b.ext}});
